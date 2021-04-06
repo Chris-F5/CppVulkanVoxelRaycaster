@@ -1,6 +1,8 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#include <glm/glm.hpp>
+
 #include <iostream>
 #include <fstream>
 #include <stdexcept>
@@ -61,6 +63,35 @@ struct SwapchainSupportDetails
     std::vector<VkPresentModeKHR> presentModes;
 };
 
+bool rightArrowDown = false;
+bool leftArrowDown = false;
+bool upArrowDown = false;
+bool downArrowDown = false;
+
+void keyCallback(GLFWwindow *_window, int key, int _scanCode, int action, int _mods)
+{
+    bool isPress = action == GLFW_PRESS;
+    bool isRelease = action == GLFW_RELEASE;
+    if (isPress || isRelease)
+    {
+        switch (key)
+        {
+        case GLFW_KEY_D:
+            rightArrowDown = isPress;
+            break;
+        case GLFW_KEY_A:
+            leftArrowDown = isPress;
+            break;
+        case GLFW_KEY_W:
+            upArrowDown = isPress;
+            break;
+        case GLFW_KEY_S:
+            downArrowDown = isPress;
+            break;
+        }
+    }
+}
+
 class App
 {
 public:
@@ -98,6 +129,9 @@ private:
     VkDescriptorPool descriptorPool;
     VkDescriptorSetLayout descriptorSetLayout;
     std::vector<VkDescriptorSet> descriptorSets;
+    glm::vec3 cameraPosition = glm::vec3(0.0);
+    std::vector<VkBuffer> camInfoBuffers;
+    std::vector<VkDeviceMemory> camInfoBuffersMemory;
 
     void initWindow()
     {
@@ -108,6 +142,8 @@ private:
         glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
         window = glfwCreateWindow(WIDTH, HEIGHT, "Vulcan Test App", nullptr, nullptr);
+
+        glfwSetKeyCallback(window, keyCallback);
     }
 
     void initVulkan()
@@ -580,33 +616,49 @@ private:
         shaderStageInfo.module = shaderModule;
         shaderStageInfo.pName = "main";
 
-        VkDescriptorSetLayoutBinding descriptorSetLayoutBinding{};
-        descriptorSetLayoutBinding.binding = 0;
-        descriptorSetLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        descriptorSetLayoutBinding.descriptorCount = 1;
-        descriptorSetLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        VkDescriptorSetLayoutBinding imageBinding{};
+        imageBinding.binding = 0;
+        imageBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        imageBinding.descriptorCount = 1;
+        imageBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+        VkDescriptorSetLayoutBinding camInfoBinding{};
+        camInfoBinding.binding = 1;
+        camInfoBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        camInfoBinding.descriptorCount = 1;
+        camInfoBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+        VkDescriptorSetLayoutBinding descriptorBindings[] = {imageBinding, camInfoBinding};
 
         VkDescriptorSetLayoutCreateInfo descriptorSetLayoutInfo{};
         descriptorSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        descriptorSetLayoutInfo.bindingCount = 1;
-        descriptorSetLayoutInfo.pBindings = &descriptorSetLayoutBinding;
+        descriptorSetLayoutInfo.bindingCount = 2;
+        descriptorSetLayoutInfo.pBindings = descriptorBindings;
 
         if (vkCreateDescriptorSetLayout(device, &descriptorSetLayoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS)
         {
             throw std::runtime_error("Failed to create descriptor set layout");
         }
 
-        // ===== Create descriptor set layouts for images
+        // ===== Create descriptor set layouts for images and cam info
 
-        VkDescriptorPoolSize poolSize{};
-        poolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        poolSize.descriptorCount = static_cast<uint32_t>(swapchainImageViews.size());
+        VkDescriptorPoolSize imagePoolSize{};
+        imagePoolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        imagePoolSize.descriptorCount = static_cast<uint32_t>(swapchainImageViews.size());
+
+        VkDescriptorPoolSize camInfoPoolSize{};
+        camInfoPoolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        camInfoPoolSize.descriptorCount = static_cast<uint32_t>(swapchainImageViews.size());
+
+        VkDescriptorPoolSize poolSizes[] = {
+            imagePoolSize,
+            camInfoPoolSize};
 
         VkDescriptorPoolCreateInfo descriptorPoolInfo{};
         descriptorPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         descriptorPoolInfo.maxSets = static_cast<uint32_t>(swapchainImageViews.size());
-        descriptorPoolInfo.poolSizeCount = 1;
-        descriptorPoolInfo.pPoolSizes = &poolSize;
+        descriptorPoolInfo.poolSizeCount = 2;
+        descriptorPoolInfo.pPoolSizes = poolSizes;
 
         if (vkCreateDescriptorPool(device, &descriptorPoolInfo, nullptr, &descriptorPool) != VK_SUCCESS)
         {
@@ -667,6 +719,8 @@ private:
     void createCommandBuffers()
     {
         commandBuffers.resize(swapchainImageViews.size());
+        camInfoBuffers.resize(swapchainImageViews.size());
+        camInfoBuffersMemory.resize(swapchainImageViews.size());
 
         QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice);
 
@@ -688,15 +742,56 @@ private:
             imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
             imageInfo.imageView = swapchainImageViews[i];
 
-            VkWriteDescriptorSet descriptorWrite{};
-            descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrite.dstSet = descriptorSets[i];
-            descriptorWrite.dstBinding = 0;
-            descriptorWrite.descriptorCount = 1;
-            descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-            descriptorWrite.pImageInfo = &imageInfo;
+            VkWriteDescriptorSet imageDescriptorWrite{};
+            imageDescriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            imageDescriptorWrite.dstSet = descriptorSets[i];
+            imageDescriptorWrite.dstBinding = 0;
+            imageDescriptorWrite.descriptorCount = 1;
+            imageDescriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+            imageDescriptorWrite.pImageInfo = &imageInfo;
 
-            vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
+            VkBufferCreateInfo camInfoBufferInfo{};
+            camInfoBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+            camInfoBufferInfo.size = sizeof(cameraPosition);
+            camInfoBufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+            camInfoBufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+            if (vkCreateBuffer(device, &camInfoBufferInfo, nullptr, &camInfoBuffers[i]) != VK_SUCCESS)
+            {
+                throw std::runtime_error("Failed to create cam info buffer");
+            }
+
+            VkMemoryRequirements camInfoMemReq;
+            vkGetBufferMemoryRequirements(device, camInfoBuffers[i], &camInfoMemReq);
+
+            VkMemoryAllocateInfo camInfoAllocInfo{};
+            camInfoAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+            camInfoAllocInfo.allocationSize = camInfoMemReq.size;
+            camInfoAllocInfo.memoryTypeIndex = findMemoryType(camInfoMemReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+            if (vkAllocateMemory(device, &camInfoAllocInfo, nullptr, &camInfoBuffersMemory[i]) != VK_SUCCESS)
+            {
+                throw std::runtime_error("Failed to allocate buffer memory");
+            }
+
+            vkBindBufferMemory(device, camInfoBuffers[i], camInfoBuffersMemory[i], 0);
+
+            VkDescriptorBufferInfo camInfoBufferDescriptorInfo{};
+            camInfoBufferDescriptorInfo.buffer = camInfoBuffers[i];
+            camInfoBufferDescriptorInfo.offset = 0;
+            camInfoBufferDescriptorInfo.range = VK_WHOLE_SIZE;
+
+            VkWriteDescriptorSet camInfoDescriptorWrite{};
+            camInfoDescriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            camInfoDescriptorWrite.dstSet = descriptorSets[i];
+            camInfoDescriptorWrite.dstBinding = 1;
+            camInfoDescriptorWrite.descriptorCount = 1;
+            camInfoDescriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            camInfoDescriptorWrite.pBufferInfo = &camInfoBufferDescriptorInfo;
+
+            VkWriteDescriptorSet descriptorWrites[] = {imageDescriptorWrite, camInfoDescriptorWrite};
+
+            vkUpdateDescriptorSets(device, 2, descriptorWrites, 0, nullptr);
 
             VkCommandBufferBeginInfo beginInfo{};
             beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -710,23 +805,23 @@ private:
             vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
             vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, &descriptorSets[i], 0, nullptr);
 
-            VkImageSubresourceRange rangeA{};
-            rangeA.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            rangeA.baseMipLevel = 0;
-            rangeA.levelCount = VK_REMAINING_MIP_LEVELS;
-            rangeA.baseArrayLayer = 0;
-            rangeA.layerCount = VK_REMAINING_ARRAY_LAYERS;
+            VkImageSubresourceRange imageRange{};
+            imageRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            imageRange.baseMipLevel = 0;
+            imageRange.levelCount = VK_REMAINING_MIP_LEVELS;
+            imageRange.baseArrayLayer = 0;
+            imageRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
 
             VkImageMemoryBarrier preImageBarrier{};
             preImageBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
             preImageBarrier.srcAccessMask = 0;
-            preImageBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT; // TODO: maybe dont nead read?
+            preImageBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
             preImageBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
             preImageBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
             preImageBarrier.srcQueueFamilyIndex = queueFamilyIndices.presentFamily.value();
             preImageBarrier.dstQueueFamilyIndex = queueFamilyIndices.computeFamily.value();
             preImageBarrier.image = swapchainImages[i];
-            preImageBarrier.subresourceRange = rangeA;
+            preImageBarrier.subresourceRange = imageRange;
 
             vkCmdPipelineBarrier(
                 commandBuffers[i],
@@ -738,13 +833,6 @@ private:
 
             vkCmdDispatch(commandBuffers[i], WIDTH, HEIGHT, 1);
 
-            VkImageSubresourceRange rangeB{};
-            rangeB.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            rangeB.baseMipLevel = 0;
-            rangeB.levelCount = VK_REMAINING_MIP_LEVELS;
-            rangeB.baseArrayLayer = 0;
-            rangeB.layerCount = VK_REMAINING_ARRAY_LAYERS;
-
             VkImageMemoryBarrier postImageBarrier{};
             preImageBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
             preImageBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
@@ -754,7 +842,7 @@ private:
             preImageBarrier.srcQueueFamilyIndex = queueFamilyIndices.computeFamily.value();
             preImageBarrier.dstQueueFamilyIndex = queueFamilyIndices.presentFamily.value();
             preImageBarrier.image = swapchainImages[i];
-            preImageBarrier.subresourceRange = rangeB;
+            preImageBarrier.subresourceRange = imageRange;
 
             vkCmdPipelineBarrier(
                 commandBuffers[i],
@@ -769,6 +857,22 @@ private:
                 throw std::runtime_error("Failed to record command buffer");
             }
         }
+    }
+
+    uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties)
+    {
+        VkPhysicalDeviceMemoryProperties memProperties;
+        vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
+
+        for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++)
+        {
+            if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
+            {
+                return i;
+            }
+        }
+
+        throw std::runtime_error("failed to find suitable memory type!");
     }
 
     void createSyncObjects()
@@ -809,6 +913,12 @@ private:
             vkWaitForFences(device, 1, &imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
         }
         imagesInFlight[imageIndex] = inFlightFences[currentFrame];
+
+        // TODO: "push constants" are faster way to push small buffers to shaders
+        void *data;
+        vkMapMemory(device, camInfoBuffersMemory[imageIndex], 0, sizeof(cameraPosition), 0, &data);
+        memcpy(data, &cameraPosition, sizeof(cameraPosition));
+        vkUnmapMemory(device, camInfoBuffersMemory[imageIndex]);
 
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -856,7 +966,27 @@ private:
         while (!glfwWindowShouldClose(window))
         {
             glfwPollEvents();
+
+            if (rightArrowDown)
+            {
+                cameraPosition.x += 0.01;
+            }
+            if (leftArrowDown)
+            {
+                cameraPosition.x -= 0.01;
+            }
+            if (upArrowDown)
+            {
+                cameraPosition.y += 0.01;
+            }
+            if (downArrowDown)
+            {
+                cameraPosition.y -= 0.01;
+            }
+
             drawFrame();
+
+            //std::cout << cameraPosition.x << " " << cameraPosition.y << std::endl;
         }
 
         vkDeviceWaitIdle(device);
@@ -884,6 +1014,12 @@ private:
         for (auto imageView : swapchainImageViews)
         {
             vkDestroyImageView(device, imageView, nullptr);
+        }
+
+        for (size_t i = 0; i < swapchainImages.size(); i++)
+        {
+            vkDestroyBuffer(device, camInfoBuffers[i], nullptr);
+            vkFreeMemory(device, camInfoBuffersMemory[i], nullptr);
         }
 
         vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);

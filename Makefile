@@ -5,7 +5,7 @@ LDFLAGS = -lglfw -lvulkan -ldl -lpthread -lX11 -lXxf86vm -lXrandr -lXi
 all: target/RayCaster target/shader.spv
 
 target/RayCaster: src/main.cpp
-	mkdir target
+	mkdir -p target
 	g++ $(CFLAGS) -o target/RayCaster src/main.cpp $(LDFLAGS)
 
 target/shader.spv: src/shader.comp
