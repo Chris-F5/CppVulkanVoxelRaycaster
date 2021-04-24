@@ -48,17 +48,6 @@ static std::vector<char> readFile(const std::string &filename)
     return buffer;
 }
 
-struct QueueFamilyIndices
-{
-    std::optional<uint32_t> computeFamily;
-    std::optional<uint32_t> presentFamily;
-
-    bool isComplete()
-    {
-        return computeFamily.has_value() && presentFamily.has_value();
-    }
-};
-
 bool rightArrowDown = false;
 bool leftArrowDown = false;
 bool upArrowDown = false;
@@ -141,9 +130,11 @@ private:
     {
         instance = createInstance(enableValidationLayers);
         createSurface();
-        pickPhysicalDevice();
-        createLogicalDevice();
-        queueFamilyIndices = findQueueFamilies(physicalDevice);
+        physicalDevice = pickPhysicalDevice(instance, surface);
+        queueFamilyIndices = findQueueFamilies(physicalDevice, surface);
+        device = createLogicalDevice(physicalDevice, enableValidationLayers, queueFamilyIndices);
+        vkGetDeviceQueue(device, queueFamilyIndices.computeFamily.value(), 0, &computeQueue);
+        vkGetDeviceQueue(device, queueFamilyIndices.presentFamily.value(), 0, &presentQueue);
         uint32_t swapchainAccessQueueFamilies[] = {
             queueFamilyIndices.computeFamily.value(),
             queueFamilyIndices.presentFamily.value()};
@@ -169,150 +160,6 @@ private:
         {
             throw std::runtime_error("Failed to create window surface");
         }
-    }
-
-    void pickPhysicalDevice()
-    {
-        uint32_t physicalDeviceCount = 0;
-        vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, nullptr);
-        if (physicalDeviceCount == 0)
-        {
-            throw std::runtime_error("Failed to find any GPUs with Vulcan support");
-        }
-
-        std::vector<VkPhysicalDevice> physicalDevices(physicalDeviceCount);
-        vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, physicalDevices.data());
-
-        for (const auto &physicalDevice : physicalDevices)
-        {
-            if (isPhysicalDeviceSuitable(physicalDevice))
-            {
-                this->physicalDevice = physicalDevice;
-                break;
-            }
-        }
-
-        if (physicalDevice == VK_NULL_HANDLE)
-        {
-            throw std::runtime_error("Failed to find suitable GPU");
-        }
-    }
-
-    bool isPhysicalDeviceSuitable(VkPhysicalDevice physicalDevice)
-    {
-        VkPhysicalDeviceProperties deviceProperties;
-        VkPhysicalDeviceFeatures deviceFeatures;
-
-        vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
-        vkGetPhysicalDeviceFeatures(physicalDevice, &deviceFeatures);
-
-        QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice);
-
-        return deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU &&
-               queueFamilyIndices.isComplete() &&
-               checkDeviceExtensionSupport(physicalDevice) &&
-               checkSwapchainSupport(physicalDevice, surface);
-    }
-
-    QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device)
-    {
-        QueueFamilyIndices indices;
-
-        uint32_t queueFamilyCount = 0;
-        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
-
-        std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
-
-        uint32_t i = 0;
-        for (const auto &queueFamily : queueFamilies)
-        {
-            if (queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT)
-            { // TODO: Check if not graphics
-                indices.computeFamily = i;
-            }
-            VkBool32 presentSupport = false;
-            vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
-            if (presentSupport)
-            {
-                indices.presentFamily = i;
-            }
-            if (indices.isComplete())
-            {
-                break;
-            }
-            i++;
-        }
-
-        return indices;
-    }
-
-    void createLogicalDevice()
-    {
-        QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
-
-        std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
-        std::set<uint32_t> uniqueQueueFamilies = {
-            indices.computeFamily.value(),
-            indices.presentFamily.value()};
-
-        float queuePriority = 1.0f;
-        for (uint32_t queueFamily : uniqueQueueFamilies)
-        {
-            VkDeviceQueueCreateInfo queueCreateInfo{};
-            queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-            queueCreateInfo.queueFamilyIndex = queueFamily;
-            queueCreateInfo.queueCount = 1;
-            queueCreateInfo.pQueuePriorities = &queuePriority;
-            queueCreateInfos.push_back(queueCreateInfo);
-        }
-
-        VkPhysicalDeviceFeatures deviceFeatures{};
-        deviceFeatures.shaderStorageImageWriteWithoutFormat = VK_TRUE;
-
-        VkDeviceCreateInfo createInfo{};
-        createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-
-        createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
-        createInfo.pQueueCreateInfos = queueCreateInfos.data();
-
-        createInfo.pEnabledFeatures = &deviceFeatures;
-
-        createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
-        createInfo.ppEnabledExtensionNames = deviceExtensions.data();
-
-        if (enableValidationLayers)
-        {
-            createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
-            createInfo.ppEnabledLayerNames = validationLayers.data();
-        }
-        else
-        {
-            createInfo.enabledLayerCount = 0;
-        }
-
-        if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &device) != VK_SUCCESS)
-        {
-            throw std::runtime_error("Failed to create logical device");
-        }
-
-        vkGetDeviceQueue(device, indices.computeFamily.value(), 0, &computeQueue);
-        vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
-    }
-
-    bool checkDeviceExtensionSupport(VkPhysicalDevice device)
-    {
-        uint32_t extensionCount;
-        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
-        std::vector<VkExtensionProperties> avaliableExtensions(extensionCount);
-        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, avaliableExtensions.data());
-        std::set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
-
-        for (const auto &extension : avaliableExtensions)
-        {
-            requiredExtensions.erase(extension.extensionName);
-        }
-        return requiredExtensions.empty();
     }
 
     VkShaderModule createShaderModule(const std::vector<char> &spv)
@@ -430,8 +277,6 @@ private:
 
     void createCommandPool()
     {
-        QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice);
-
         VkCommandPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         poolInfo.queueFamilyIndex = queueFamilyIndices.computeFamily.value();
@@ -447,8 +292,6 @@ private:
         commandBuffers.resize(swapchain.imageCount());
         camInfoBuffers.resize(swapchain.imageCount());
         camInfoBuffersMemory.resize(swapchain.imageCount());
-
-        QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice);
 
         VkCommandBufferAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -649,11 +492,10 @@ private:
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-        VkSemaphore waitSemaphores[] = {imageAvailableSemaphores[swapchain.currentFrame]};
         VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 
         submitInfo.waitSemaphoreCount = 1;
-        submitInfo.pWaitSemaphores = waitSemaphores;
+        submitInfo.pWaitSemaphores = &imageAvailableSemaphores[swapchain.currentFrame];
         submitInfo.pWaitDstStageMask = waitStages;
 
         submitInfo.commandBufferCount = 1;
