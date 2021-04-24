@@ -659,10 +659,8 @@ private:
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &commandBuffers[imageIndex];
 
-        //VkSemaphore signalSemaphores[] = {renderFinishedSemaphores[currentFrame]};
-        //submitInfo.signalSemaphoreCount = 1;
-        //submitInfo.pSignalSemaphores = signalSemaphores;
-        submitInfo.signalSemaphoreCount = 0;
+        submitInfo.signalSemaphoreCount = 1;
+        submitInfo.pSignalSemaphores = &renderFinishedSemaphores[swapchain.currentFrame];
 
         vkResetFences(device, 1, &inFlightFences[swapchain.currentFrame]);
 
@@ -679,10 +677,10 @@ private:
         presentInfo.swapchainCount = 1;
         presentInfo.pSwapchains = swapchains;
         presentInfo.pImageIndices = &imageIndex;
+        presentInfo.waitSemaphoreCount = 1;
+        presentInfo.pWaitSemaphores = &renderFinishedSemaphores[swapchain.currentFrame];
 
         vkQueuePresentKHR(presentQueue, &presentInfo);
-
-        vkQueueWaitIdle(presentQueue);
 
         swapchain.currentFrame = (swapchain.currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
