@@ -3,6 +3,8 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#include "vulkan_device.hpp"
+
 #include <vector>
 
 struct Swapchain
@@ -20,5 +22,5 @@ struct Swapchain
     void cleanup(VkDevice device);
 };
 
-Swapchain createSwapchain(VkDevice device, VkPhysicalDevice physicalDevice, GLFWwindow *window, VkSurfaceKHR surface, uint32_t queueFamilies[], int queueFamilyCount);
+Swapchain createSwapchain(VkDevice device, VkPhysicalDevice physicalDevice, GLFWwindow *window, VkSurfaceKHR surface, QueueFamilyIndices queueFamilyIndices);
 bool checkSwapchainSupport(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface);

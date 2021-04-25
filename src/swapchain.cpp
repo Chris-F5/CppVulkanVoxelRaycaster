@@ -109,9 +109,8 @@ uint32_t chooseImageCount(VkSurfaceCapabilitiesKHR surfaceCapabilities)
 std::vector<VkImage> getSwapchainImages(VkDevice device, VkSwapchainKHR swapchain)
 {
     uint32_t imageCount;
-    std::vector<VkImage> images;
     vkGetSwapchainImagesKHR(device, swapchain, &imageCount, nullptr);
-    images.resize(imageCount);
+    std::vector<VkImage> images(imageCount);
     vkGetSwapchainImagesKHR(device, swapchain, &imageCount, images.data());
 
     return images;
@@ -119,8 +118,7 @@ std::vector<VkImage> getSwapchainImages(VkDevice device, VkSwapchainKHR swapchai
 
 std::vector<VkImageView> createImageViews(VkDevice device, std::vector<VkImage> swapchainImages, VkFormat imageFormat)
 {
-    std::vector<VkImageView> imageViews;
-    imageViews.resize(swapchainImages.size());
+    std::vector<VkImageView> imageViews(swapchainImages.size());
     for (size_t i = 0; i < swapchainImages.size(); i++)
     {
         VkImageViewCreateInfo createInfo{};
@@ -156,7 +154,7 @@ bool checkSwapchainSupport(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface
            !supportDetails.presentModes.empty();
 }
 
-Swapchain createSwapchain(VkDevice device, VkPhysicalDevice physicalDevice, GLFWwindow *window, VkSurfaceKHR surface, uint32_t queueFamilies[], int queueFamilyCount)
+Swapchain createSwapchain(VkDevice device, VkPhysicalDevice physicalDevice, GLFWwindow *window, VkSurfaceKHR surface, QueueFamilyIndices queueFamilyIndices)
 {
     Swapchain swapchain;
 
@@ -178,6 +176,9 @@ Swapchain createSwapchain(VkDevice device, VkPhysicalDevice physicalDevice, GLFW
     // Number of layers each image consists of. 1 because we render to a 2d screen.
     createInfo.imageArrayLayers = 1;
     createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
+
+    uint32_t queueFamilies[] = {queueFamilyIndices.computeFamily.value(), queueFamilyIndices.presentFamily.value()};
+    uint32_t queueFamilyCount = sizeof(queueFamilies) / sizeof(queueFamilies[0]);
 
     bool queueFamiliesAreSame = true;
     for (int i = 0; i < queueFamilyCount; i++)

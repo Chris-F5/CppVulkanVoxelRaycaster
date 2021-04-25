@@ -40,6 +40,16 @@ bool checkValidationLayerSupport()
     return true;
 }
 
+VkSurfaceKHR createSurface(VkInstance instance, GLFWwindow *window)
+{
+    VkSurfaceKHR surface;
+    if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS)
+    {
+        throw std::runtime_error("Failed to create window surface");
+    }
+    return surface;
+}
+
 VkInstance createInstance(const bool enableValidationLayers)
 {
     VkApplicationInfo appInfo{};
@@ -209,15 +219,15 @@ VkDevice createLogicalDevice(VkPhysicalDevice physicalDevice, bool enableValidat
     return device;
 }
 
-QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface)
+QueueFamilyIndices findQueueFamilies(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface)
 {
     QueueFamilyIndices indices;
 
     uint32_t queueFamilyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, nullptr);
 
     std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilies.data());
 
     uint32_t i = 0;
     for (const auto &queueFamily : queueFamilies)
@@ -227,7 +237,7 @@ QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surfa
             indices.computeFamily = i;
         }
         VkBool32 presentSupport = false;
-        vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
+        vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, surface, &presentSupport);
         if (presentSupport)
         {
             indices.presentFamily = i;

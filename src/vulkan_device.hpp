@@ -16,7 +16,8 @@ struct QueueFamilyIndices
     }
 };
 
+VkSurfaceKHR createSurface(VkInstance instance, GLFWwindow *window);
 VkInstance createInstance(const bool enableValidationLayers);
 VkPhysicalDevice pickPhysicalDevice(VkInstance instance, VkSurfaceKHR surface);
 VkDevice createLogicalDevice(VkPhysicalDevice physicalDevice, bool enableValidationLayers, QueueFamilyIndices queueFamilyIndices);
-QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface);
+QueueFamilyIndices findQueueFamilies(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface);
