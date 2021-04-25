@@ -2,6 +2,7 @@
 #include <GLFW/glfw3.h>
 
 #include <glm/glm.hpp>
+#include <glm/gtx/quaternion.hpp>
 
 #include <iostream>
 #include <fstream>
@@ -52,6 +53,10 @@ bool rightArrowDown = false;
 bool leftArrowDown = false;
 bool upArrowDown = false;
 bool downArrowDown = false;
+bool dKeyDown = false;
+bool aKeyDown = false;
+bool wKeyDown = false;
+bool sKeyDown = false;
 
 void keyCallback(GLFWwindow *_window, int key, int _scanCode, int action, int _mods)
 {
@@ -62,20 +67,38 @@ void keyCallback(GLFWwindow *_window, int key, int _scanCode, int action, int _m
         switch (key)
         {
         case GLFW_KEY_D:
-            rightArrowDown = isPress;
+            dKeyDown = isPress;
             break;
         case GLFW_KEY_A:
-            leftArrowDown = isPress;
+            aKeyDown = isPress;
             break;
         case GLFW_KEY_W:
-            upArrowDown = isPress;
+            wKeyDown = isPress;
             break;
         case GLFW_KEY_S:
+            sKeyDown = isPress;
+            break;
+        case GLFW_KEY_RIGHT:
+            rightArrowDown = isPress;
+            break;
+        case GLFW_KEY_LEFT:
+            leftArrowDown = isPress;
+            break;
+        case GLFW_KEY_UP:
+            upArrowDown = isPress;
+            break;
+        case GLFW_KEY_DOWN:
             downArrowDown = isPress;
             break;
         }
     }
 }
+
+struct CamInfo
+{
+    glm::vec4 pos;
+    glm::mat4 rot;
+};
 
 class App
 {
@@ -109,7 +132,8 @@ private:
     VkDescriptorPool descriptorPool;
     VkDescriptorSetLayout descriptorSetLayout;
     std::vector<VkDescriptorSet> descriptorSets;
-    glm::vec3 cameraPosition = glm::vec3(0.0);
+    glm::vec4 cameraPosition = glm::vec4(0.0);
+    glm::vec2 cameraRot = glm::vec2(0.0);
     std::vector<VkBuffer> camInfoBuffers;
     std::vector<VkDeviceMemory> camInfoBuffersMemory;
 
@@ -321,7 +345,7 @@ private:
 
             VkBufferCreateInfo camInfoBufferInfo{};
             camInfoBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-            camInfoBufferInfo.size = sizeof(cameraPosition);
+            camInfoBufferInfo.size = sizeof(CamInfo);
             camInfoBufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
             camInfoBufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
@@ -485,8 +509,28 @@ private:
 
         // TODO: "push constants" are faster way to push small buffers to shaders
         void *data;
-        vkMapMemory(device, camInfoBuffersMemory[imageIndex], 0, sizeof(cameraPosition), 0, &data);
-        memcpy(data, &cameraPosition, sizeof(cameraPosition));
+        CamInfo camInfo;
+        camInfo.pos = cameraPosition;
+        // ======== MAKE ROT MATRIX
+        float pi = 3.141592;
+        // camRotX and Y are defined elsewhere and can be controlled from the keyboard during runtime.
+        glm::vec3 camEulerAngles = glm::vec3(cameraRot.x, cameraRot.y, 0);
+
+        // Convert to radians
+        camEulerAngles.x = camEulerAngles.x * pi / 180;
+        camEulerAngles.y = camEulerAngles.y * pi / 180;
+        camEulerAngles.z = camEulerAngles.z * pi / 180;
+
+        // Generate Quaternian
+        glm::quat camRotation;
+        camRotation = glm::quat(camEulerAngles);
+
+        // Generate rotation matrix from quaternian
+        glm::mat4 camToWorldMatrix = glm::toMat4(camRotation);
+        // =======
+        camInfo.rot = camToWorldMatrix;
+        vkMapMemory(device, camInfoBuffersMemory[imageIndex], 0, sizeof(camInfo), 0, &data);
+        memcpy(data, &camInfo, sizeof(camInfo));
         vkUnmapMemory(device, camInfoBuffersMemory[imageIndex]);
 
         VkSubmitInfo submitInfo{};
@@ -533,21 +577,38 @@ private:
         {
             glfwPollEvents();
 
-            if (rightArrowDown)
+            if (dKeyDown)
             {
                 cameraPosition.x += 0.01;
             }
-            if (leftArrowDown)
+            if (aKeyDown)
             {
                 cameraPosition.x -= 0.01;
             }
-            if (upArrowDown)
+            if (wKeyDown)
             {
                 cameraPosition.y += 0.01;
             }
-            if (downArrowDown)
+            if (sKeyDown)
             {
                 cameraPosition.y -= 0.01;
+            }
+
+            if (rightArrowDown)
+            {
+                cameraRot.y += 0.1;
+            }
+            if (leftArrowDown)
+            {
+                cameraRot.y -= 0.1;
+            }
+            if (upArrowDown)
+            {
+                cameraRot.x -= 0.1;
+            }
+            if (downArrowDown)
+            {
+                cameraRot.x += 0.1;
             }
 
             drawFrame();
