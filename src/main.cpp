@@ -8,6 +8,7 @@
 
 #include "vulkan_device.hpp"
 #include "render_pipeline.hpp"
+#include "input.hpp"
 
 #ifdef NDEBUG
 const bool enableValidationLayers = false;
@@ -27,51 +28,6 @@ GLFWwindow *createWindow(std::string title, uint32_t width, uint32_t height)
     return glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
 }
 
-bool rightArrowDown = false;
-bool leftArrowDown = false;
-bool upArrowDown = false;
-bool downArrowDown = false;
-bool dKeyDown = false;
-bool aKeyDown = false;
-bool wKeyDown = false;
-bool sKeyDown = false;
-
-void keyCallback(GLFWwindow *_window, int key, int _scanCode, int action, int _mods)
-{
-    bool isPress = action == GLFW_PRESS;
-    bool isRelease = action == GLFW_RELEASE;
-    if (isPress || isRelease)
-    {
-        switch (key)
-        {
-        case GLFW_KEY_D:
-            dKeyDown = isPress;
-            break;
-        case GLFW_KEY_A:
-            aKeyDown = isPress;
-            break;
-        case GLFW_KEY_W:
-            wKeyDown = isPress;
-            break;
-        case GLFW_KEY_S:
-            sKeyDown = isPress;
-            break;
-        case GLFW_KEY_RIGHT:
-            rightArrowDown = isPress;
-            break;
-        case GLFW_KEY_LEFT:
-            leftArrowDown = isPress;
-            break;
-        case GLFW_KEY_UP:
-            upArrowDown = isPress;
-            break;
-        case GLFW_KEY_DOWN:
-            downArrowDown = isPress;
-            break;
-        }
-    }
-}
-
 void mainLoop(GLFWwindow *window, RenderPipeline *renderPipeline)
 {
     glm::vec4 cameraPosition = glm::vec4(0.0);
@@ -80,37 +36,38 @@ void mainLoop(GLFWwindow *window, RenderPipeline *renderPipeline)
     while (!glfwWindowShouldClose(window))
     {
         glfwPollEvents();
+        InputState inputState = pollInput(window);
 
-        if (dKeyDown)
+        if (inputState.d)
         {
             cameraPosition.x += 0.01;
         }
-        if (aKeyDown)
+        if (inputState.a)
         {
             cameraPosition.x -= 0.01;
         }
-        if (wKeyDown)
+        if (inputState.w)
         {
             cameraPosition.y += 0.01;
         }
-        if (sKeyDown)
+        if (inputState.s)
         {
             cameraPosition.y -= 0.01;
         }
 
-        if (rightArrowDown)
+        if (inputState.rightArrow)
         {
             cameraRot.y += 0.1;
         }
-        if (leftArrowDown)
+        if (inputState.leftArrow)
         {
             cameraRot.y -= 0.1;
         }
-        if (upArrowDown)
+        if (inputState.upArrow)
         {
             cameraRot.x -= 0.1;
         }
-        if (downArrowDown)
+        if (inputState.downArrow)
         {
             cameraRot.x += 0.1;
         }
@@ -137,8 +94,6 @@ void mainLoop(GLFWwindow *window, RenderPipeline *renderPipeline)
         camInfo.camRotMat = camToWorldMatrix;
 
         drawFrame(renderPipeline, camInfo);
-
-        //std::cout << cameraPosition.x << " " << cameraPosition.y << std::endl;
     }
 }
 
@@ -146,7 +101,7 @@ int main()
 {
     glfwInit();
     GLFWwindow *window = createWindow("Vulkan Test App", WIDTH, HEIGHT);
-    glfwSetKeyCallback(window, keyCallback);
+    glfwSetInputMode(window, GLFW_STICKY_KEYS, GLFW_TRUE);
 
     RenderPipeline renderPipeline = createRenderPipeline(window, enableValidationLayers, "shader.spv");
 
