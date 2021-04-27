@@ -12,6 +12,8 @@ struct InputState
     bool a = false;
     bool w = false;
     bool s = false;
+    bool leftShift = false;
+    bool space = false;
 };
 
 InputState pollInput(GLFWwindow *window);

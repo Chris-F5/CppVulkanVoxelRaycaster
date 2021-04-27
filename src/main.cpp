@@ -25,6 +25,7 @@ void mainLoop(GLFWwindow *window, RenderPipeline *renderPipeline)
     Camera camera;
     camera.position = glm::vec3(0.0);
     camera.degreesRotation = glm::vec3(0.0);
+    camera.speed = 0.01;
 
     while (!glfwWindowShouldClose(window))
     {
