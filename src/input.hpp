@@ -15,3 +15,4 @@ struct InputState
 };
 
 InputState pollInput(GLFWwindow *window);
+void enableStickyKeys(GLFWwindow *window);

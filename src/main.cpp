@@ -6,7 +6,7 @@
 
 #include <string>
 
-#include "vulkan_device.hpp"
+#include "window.hpp"
 #include "render_pipeline.hpp"
 #include "input.hpp"
 
@@ -18,15 +18,6 @@ const bool enableValidationLayers = true;
 
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
-
-GLFWwindow *createWindow(std::string title, uint32_t width, uint32_t height)
-{
-    // Dont use opengl
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-
-    return glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
-}
 
 void mainLoop(GLFWwindow *window, RenderPipeline *renderPipeline)
 {
@@ -101,7 +92,7 @@ int main()
 {
     glfwInit();
     GLFWwindow *window = createWindow("Vulkan Test App", WIDTH, HEIGHT);
-    glfwSetInputMode(window, GLFW_STICKY_KEYS, GLFW_TRUE);
+    enableStickyKeys(window);
 
     RenderPipeline renderPipeline = createRenderPipeline(window, enableValidationLayers, "shader.spv");
 

@@ -22,3 +22,8 @@ InputState pollInput(GLFWwindow *window)
 
     return state;
 }
+
+void enableStickyKeys(GLFWwindow *window)
+{
+    glfwSetInputMode(window, GLFW_STICKY_KEYS, GLFW_TRUE);
+}

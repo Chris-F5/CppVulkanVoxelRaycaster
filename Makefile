@@ -5,9 +5,9 @@ LDFLAGS = -lglfw -lvulkan -ldl -lpthread -lX11 -lXxf86vm -lXrandr -lXi
 
 all: target/RayCaster target/shader.spv
 
-target/RayCaster: obj/main.o obj/vulkan_device.o obj/swapchain.o obj/render_pipeline.o obj/input.o
+target/RayCaster: obj/main.o obj/vulkan_device.o obj/swapchain.o obj/render_pipeline.o obj/input.o obj/window.o
 	mkdir -p target
-	g++ $(CFLAGS) obj/main.o obj/vulkan_device.o obj/swapchain.o obj/render_pipeline.o obj/input.o -o target/RayCaster $(LDFLAGS)
+	g++ $(CFLAGS) obj/main.o obj/vulkan_device.o obj/swapchain.o obj/render_pipeline.o obj/input.o obj/window.o -o target/RayCaster $(LDFLAGS)
 
 obj/main.o: src/main.cpp
 	mkdir -p obj
@@ -28,6 +28,10 @@ obj/render_pipeline.o: src/render_pipeline.cpp src/render_pipeline.hpp
 obj/input.o: src/input.cpp src/input.hpp
 	mkdir -p obj
 	g++ $(CFLAGS) -c src/input.cpp -o obj/input.o $(LDFLAGS)
+
+obj/window.o: src/window.cpp src/window.hpp
+	mkdir -p obj
+	g++ $(CFLAGS) -c src/window.cpp -o obj/window.o $(LDFLAGS)
 
 target/shader.spv: src/shader.comp
 	glslc src/shader.comp -o target/shader.spv
