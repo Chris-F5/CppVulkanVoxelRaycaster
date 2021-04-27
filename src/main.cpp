@@ -9,6 +9,7 @@
 #include "window.hpp"
 #include "render_pipeline.hpp"
 #include "input.hpp"
+#include "camera_controller.hpp"
 
 #ifdef NDEBUG
 const bool enableValidationLayers = false;
@@ -21,68 +22,20 @@ const uint32_t HEIGHT = 600;
 
 void mainLoop(GLFWwindow *window, RenderPipeline *renderPipeline)
 {
-    glm::vec4 cameraPosition = glm::vec4(0.0);
-    glm::vec2 cameraRot = glm::vec2(0.0);
+    Camera camera;
+    camera.position = glm::vec3(0.0);
+    camera.degreesRotation = glm::vec3(0.0);
 
     while (!glfwWindowShouldClose(window))
     {
         glfwPollEvents();
         InputState inputState = pollInput(window);
 
-        if (inputState.d)
-        {
-            cameraPosition.x += 0.01;
-        }
-        if (inputState.a)
-        {
-            cameraPosition.x -= 0.01;
-        }
-        if (inputState.w)
-        {
-            cameraPosition.y += 0.01;
-        }
-        if (inputState.s)
-        {
-            cameraPosition.y -= 0.01;
-        }
-
-        if (inputState.rightArrow)
-        {
-            cameraRot.y += 0.1;
-        }
-        if (inputState.leftArrow)
-        {
-            cameraRot.y -= 0.1;
-        }
-        if (inputState.upArrow)
-        {
-            cameraRot.x -= 0.1;
-        }
-        if (inputState.downArrow)
-        {
-            cameraRot.x += 0.1;
-        }
+        updateCamera(&camera, inputState);
 
         UniformData camInfo;
-        camInfo.camPos = cameraPosition;
-        // ======== MAKE ROT MATRIX
-        float pi = 3.141592;
-        // camRotX and Y are defined elsewhere and can be controlled from the keyboard during runtime.
-        glm::vec3 camEulerAngles = glm::vec3(cameraRot.x, cameraRot.y, 0);
-
-        // Convert to radians
-        camEulerAngles.x = camEulerAngles.x * pi / 180;
-        camEulerAngles.y = camEulerAngles.y * pi / 180;
-        camEulerAngles.z = camEulerAngles.z * pi / 180;
-
-        // Generate Quaternian
-        glm::quat camRotation;
-        camRotation = glm::quat(camEulerAngles);
-
-        // Generate rotation matrix from quaternian
-        glm::mat4 camToWorldMatrix = glm::toMat4(camRotation);
-        // =======
-        camInfo.camRotMat = camToWorldMatrix;
+        camInfo.camPos = glm::vec4(camera.position, 0);
+        camInfo.camRotMat = camera.camToWorldRotMat();
 
         drawFrame(renderPipeline, camInfo);
     }
