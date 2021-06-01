@@ -10,67 +10,279 @@ layout (binding = 1) uniform CamInfo{
     mat4 rot;
 } camInfo;
 
+const vec3 BACKGROUND_COLOR = vec3(0.1, 0.1, 0.2);
+
+const uint SUBNODE_X[] = {0, 1, 0, 1, 0, 1, 0, 1};
+const uint SUBNODE_Y[] = {0, 0, 1, 1, 0, 0, 1, 1};
+const uint SUBNODE_Z[] = {0, 0, 0, 0, 1, 1, 1, 1};
+
+const uint EXIT_NODE = 8;
+
+const uint SUBNODE_TRANSFORM_X_POSITIVE = 0;
+const uint SUBNODE_TRANSFORM_Y_POSITIVE = 8;
+const uint SUBNODE_TRANSFORM_Z_POSITIVE = 16;
+const uint SUBNODE_TRANSFORM_X_NEGATIVE = 24;
+const uint SUBNODE_TRANSFORM_Y_NEGATIVE = 32;
+const uint SUBNODE_TRANSFORM_Z_NEGATIVE = 40;
+const uint SUBNODE_TRANSFORM[] = {
+    1, EXIT_NODE, 3, EXIT_NODE, 5, EXIT_NODE, 7, EXIT_NODE,
+    2, 3, EXIT_NODE, EXIT_NODE, 6, 7, EXIT_NODE, EXIT_NODE,
+    4, 5, 6, 7, EXIT_NODE, EXIT_NODE, EXIT_NODE, EXIT_NODE,
+    EXIT_NODE, 0, EXIT_NODE, 2, EXIT_NODE, 4, EXIT_NODE, 6,
+    EXIT_NODE, EXIT_NODE, 0, 1, EXIT_NODE, EXIT_NODE, 4, 5,
+    EXIT_NODE, EXIT_NODE, EXIT_NODE, EXIT_NODE, 0, 1, 2, 3};
+
+const uint NODE_TYPE_PARENT = 0;
+const uint NODE_TYPE_COLORED = 1;
+const uint NODE_TYPE_EMPTY = 2;
+
+const uint OCTREE_MAX_DEPTH = 4;
+const float OCTREE_ROOT_SIZE = 8;//pow(2, OCTREE_MAX_DEPTH - 1);
+const uint octree[] = {
+//  Header              | R    G    B    |  Children......................
+    NODE_TYPE_PARENT,     000, 000, 000,    12, 24, 36, 48, 60, 72, 84, 96,
+    NODE_TYPE_EMPTY,      000, 000, 000,    00, 00, 00, 00, 00, 00, 00, 00,
+    NODE_TYPE_COLORED,    000, 255, 000,    00, 00, 00, 00, 00, 00, 00, 00,
+    NODE_TYPE_EMPTY,    000, 000, 255,    00, 00, 00, 00, 00, 00, 00, 00,
+    NODE_TYPE_COLORED,    255, 255, 000,    00, 00, 00, 00, 00, 00, 00, 00,
+    NODE_TYPE_COLORED,    255, 000, 255,    00, 00, 00, 00, 00, 00, 00, 00,
+    NODE_TYPE_COLORED,    000, 255, 255,    00, 00, 00, 00, 00, 00, 00, 00,
+    NODE_TYPE_PARENT,     255, 255, 255,    108, 120, 132, 144, 156, 168, 180, 192,
+    NODE_TYPE_PARENT,     255, 255, 255,    108, 168, 132, 144, 156, 168, 180, 204,
+    NODE_TYPE_COLORED,    000, 000, 000,    00, 00, 00, 00, 00, 00, 00, 00,
+    NODE_TYPE_EMPTY,      100, 000, 000,    00, 00, 00, 00, 00, 00, 00, 00,
+    NODE_TYPE_COLORED,    000, 100, 000,    00, 00, 00, 00, 00, 00, 00, 00,
+    NODE_TYPE_COLORED,    000, 000, 100,    00, 00, 00, 00, 00, 00, 00, 00,
+    NODE_TYPE_COLORED,    100, 100, 000,    00, 00, 00, 00, 00, 00, 00, 00,
+    NODE_TYPE_COLORED,    100, 000, 100,    00, 00, 00, 00, 00, 00, 00, 00,
+    NODE_TYPE_EMPTY,    000, 100, 100,    00, 00, 00, 00, 00, 00, 00, 00,
+    NODE_TYPE_COLORED,    100, 100, 100,    00, 00, 00, 00, 00, 00, 00, 00,
+    NODE_TYPE_PARENT,     000, 000, 000,    108, 120, 132, 144, 156, 168, 180, 192
+};
+
+uint traversalPointers[OCTREE_MAX_DEPTH];
+uint traversalPath[OCTREE_MAX_DEPTH - 1];
+uint currentDepth;
+float currentNodeSize;
+vec3 currentNodePos;
+
+uint currentRaySubnodeTransformX;
+uint currentRaySubnodeTransformY;
+uint currentRaySubnodeTransformZ;
+
+uint nodeType(){
+    return octree[traversalPointers[currentDepth]];
+}
+
+void traverseToRoot(){
+    currentDepth = 0;
+    traversalPointers[0] = 0;
+    currentNodeSize = OCTREE_ROOT_SIZE;
+    currentNodePos = vec3(0);
+}
+
+void traverseUp(){
+    currentDepth -= 1;
+
+    uint childIndex = traversalPath[currentDepth];
+    currentNodePos.x -= SUBNODE_X[childIndex] * currentNodeSize;
+    currentNodePos.y -= SUBNODE_Y[childIndex] * currentNodeSize;
+    currentNodePos.z -= SUBNODE_Z[childIndex] * currentNodeSize;
+
+    currentNodeSize *= 2;
+}
+
+void traverseDown(uint childIndex){
+    traversalPath[currentDepth] = childIndex;
+
+    uint currentNodePointer = traversalPointers[currentDepth];
+    uint childPointer = octree[currentNodePointer + 4 + childIndex];
+    
+    currentDepth += 1;
+    currentNodeSize /= 2;
+    currentNodePos.x += SUBNODE_X[childIndex] * currentNodeSize;
+    currentNodePos.y += SUBNODE_Y[childIndex] * currentNodeSize;
+    currentNodePos.z += SUBNODE_Z[childIndex] * currentNodeSize;
+    traversalPointers[currentDepth] = childPointer;
+}
+
+/// Traverses to the deepest node that contains the position from the current node
+void traverseToPos(vec3 pos){
+    while(true){
+        if (nodeType() == NODE_TYPE_PARENT){
+            float halfNodeSize = currentNodeSize / 2;
+            uint childNodeIndex = 0;
+            if (pos.x > currentNodePos.x + halfNodeSize){
+                childNodeIndex += 1;
+            }
+            if (pos.y > currentNodePos.y + halfNodeSize){
+                childNodeIndex += 2;
+            }
+            if (pos.z > currentNodePos.z + halfNodeSize){
+                childNodeIndex += 4;
+            }
+            traverseDown(childNodeIndex);
+        }else{
+            break;
+        }
+    }
+}
+
+vec3 nodeColor(){
+    const uint currentVoxelPointer = traversalPointers[currentDepth];
+    return vec3(
+        octree[currentVoxelPointer + 1] / 255.0,
+        octree[currentVoxelPointer + 2] / 255.0,
+        octree[currentVoxelPointer + 3] / 255.0
+    );
+}
+
+/// Traverse to the largest node thats X0 plane is equal to the current nodes X1 plane.
+/// Returns true if sucessfull. Returns false if no nodes X0 plane is equal to the current nodes X1 plane.
+bool traverseInDir(const uint subnodeTransform){
+    while (true){
+        const uint currentSubnode = traversalPath[currentDepth - 1];
+        const uint newSubnode = SUBNODE_TRANSFORM[subnodeTransform + currentSubnode];
+        if (newSubnode == EXIT_NODE){
+            if (currentDepth == 1){
+                return false;
+            }
+
+            traverseUp();
+        }else{
+            traverseUp();
+            traverseDown(newSubnode);
+            return true;
+        }
+    }
+    // Exception
+    return false;
+}
+
+/// Returns the t at which the new node is entered or 0 if exits the root node
+float traverseNextSubnode(float tx, float ty, float tz){
+    if (tx < ty && tx < tz){
+        if(traverseInDir(currentRaySubnodeTransformX)){
+            return tx;
+        }else{
+            return 0;
+        }
+    } else if(ty < tz){
+        if(traverseInDir(currentRaySubnodeTransformY)){
+            return ty;
+        }else{
+            return 0;
+        }
+    } else {
+        if(traverseInDir(currentRaySubnodeTransformZ)){
+            return tz;
+        }else{
+            return 0;
+        }
+    }
+}
+
+/// Casts a ray whichs origin is inside the root node.
+/// Octree must be traversed to the deepest origin node.
+/// Returns the t at which the intersection occurs or 0 if no intersection.
+/// Leaves the octree traversed to the hit voxel.
+float castInternalRay(const vec3 pos, const vec3 dir){
+    float xOffset;
+    if (dir.x >= 0){
+        currentRaySubnodeTransformX = SUBNODE_TRANSFORM_X_POSITIVE;
+        xOffset = 1;
+    }else{
+        currentRaySubnodeTransformX = SUBNODE_TRANSFORM_X_NEGATIVE;
+        xOffset = 0;
+    }
+    float yOffset;
+    if (dir.y >= 0){
+        currentRaySubnodeTransformY = SUBNODE_TRANSFORM_Y_POSITIVE;
+        yOffset = 1;
+    }else{
+        currentRaySubnodeTransformY = SUBNODE_TRANSFORM_Y_NEGATIVE;
+        yOffset = 0;
+    }
+    float zOffset;
+    if (dir.z >= 0){
+        currentRaySubnodeTransformZ = SUBNODE_TRANSFORM_Z_POSITIVE;
+        zOffset = 1;
+    }else{
+        currentRaySubnodeTransformZ = SUBNODE_TRANSFORM_Z_NEGATIVE;
+        zOffset = 0;
+    }
+
+    while(true){
+        float tx = (currentNodePos.x + (xOffset * currentNodeSize) - pos.x) / dir.x;
+        float ty = (currentNodePos.y + (yOffset * currentNodeSize) - pos.y) / dir.y;
+        float tz = (currentNodePos.z + (zOffset * currentNodeSize) - pos.z) / dir.z;
+        float t = traverseNextSubnode(tx, ty, tz);
+        if(t == 0){
+            return 0;
+        }else{
+            uint nextType = nodeType();
+            if (nextType == NODE_TYPE_COLORED){
+                return t;
+            }else if(nextType == NODE_TYPE_PARENT){
+                vec3 tPos = t * dir + pos;
+                traverseToPos(tPos);
+                if (nodeType() == NODE_TYPE_COLORED){
+                    return t;
+                }
+            }
+        }
+    }
+}
+
 void main(){
 	const float aspectRatio = float(gl_NumWorkGroups.x) / float(gl_NumWorkGroups.y);
 	const vec2 screenSpaceLocation = vec2(
 		(float(gl_WorkGroupID.x) / float(gl_NumWorkGroups.x) * 2 - 1) * aspectRatio,
 		float(gl_WorkGroupID.y) / float(gl_NumWorkGroups.y) * -2 + 1
 		);
-	const vec3 rayDirection = vec3(camInfo.rot * normalize(vec4(screenSpaceLocation, 1, 1)));
-    const vec3 pos = vec3(camInfo.pos);
+	const vec3 dir = vec3(camInfo.rot * normalize(vec4(screenSpaceLocation, 1, 1)));
+    vec3 pos = vec3(camInfo.pos);
 
-    int xStep;
-    if (rayDirection.x > 0){
-        xStep = 1;
-    }else if(rayDirection.x < 0){
-        xStep = -1;
-    }else{
-        xStep = 0;
-    }
+    vec3 color;
 
-    int yStep;
-    if (rayDirection.y > 0){
-        yStep = 1;
-    }else if(rayDirection.y < 0){
-        yStep = -1;
-    }else{
-        yStep = 0;
-    }
-
-    int zStep;
-    if (rayDirection.z > 0){
-        zStep = 1;
-    }else if(rayDirection.z < 0){
-        zStep = -1;
-    }else{
-        zStep = 0;
-    }
-
-    float tMaxX = abs(1 / rayDirection.x);
-    float tMaxY = abs(1 / rayDirection.y);
-    float tMaxZ = abs(1 / rayDirection.z);
-
-    float t = 0;
-
-    if (tMaxX < tMaxY){
-        if(tMaxX < tMaxZ){
-            // X
-            t += tMaxX;
+    // If out of bounds then black screen
+    if (pos.x <= 0 ||
+        pos.x > OCTREE_ROOT_SIZE ||
+        pos.y <= 0 ||
+        pos.y > OCTREE_ROOT_SIZE ||
+        pos.z <= 0 ||
+        pos.z > OCTREE_ROOT_SIZE)
+        {
+        float tx0 = (-pos.x) / dir.x;
+        float ty0 = (-pos.y) / dir.y;
+        float tz0 = (-pos.z) / dir.z;
+        float tx1 = (OCTREE_ROOT_SIZE - pos.x) / dir.x;
+        float ty1 = (OCTREE_ROOT_SIZE - pos.y) / dir.y;
+        float tz1 = (OCTREE_ROOT_SIZE - pos.z) / dir.z;
+        float tmin = max(max(min(tx0, tx1), min(ty0, ty1)), min(tz0, tz1));
+        float tmax = min(min(max(tx0, tx1), max(ty0, ty1)), max(tz0, tz1));
+        vec3 color;
+        if(tmin < tmax && tmin > 0){
+            color = vec3(1,1,1);
+            pos = dir * tmin + pos;
         }else{
-            // Z
-            t += tMaxZ;
-        }
-    }else{
-        if(tMaxY < tMaxZ){
-            // Y
-            t += tMaxY;
-        }else{
-            // Z
-            t += tMaxZ;
+            imageStore( image, ivec2(gl_WorkGroupID.xy), vec4(BACKGROUND_COLOR, 1.0) );
+            return;
         }
     }
 
-	vec3 color = vec3(t / 5, t / 5, t / 5);
+    traverseToRoot();
+    traverseToPos(pos);
+
+    if(nodeType() == NODE_TYPE_COLORED){
+        color = nodeColor();
+    }else if(castInternalRay(pos, dir) == 0){
+        color = BACKGROUND_COLOR;
+    }else{
+        color = nodeColor();
+    }
+
+
 
 	imageStore( image, ivec2(gl_WorkGroupID.xy), vec4(color, 1.0) );
 }
