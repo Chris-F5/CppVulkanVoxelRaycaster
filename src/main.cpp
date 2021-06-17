@@ -7,7 +7,7 @@
 #include <string>
 
 #include "window.hpp"
-#include "render_pipeline.hpp"
+#include "vk/renderer.hpp"
 #include "input.hpp"
 #include "camera_controller.hpp"
 
@@ -20,7 +20,7 @@ const bool enableValidationLayers = true;
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 
-void mainLoop(GLFWwindow *window, RenderPipeline *renderPipeline)
+void mainLoop(GLFWwindow *window, Renderer *renderer)
 {
     Camera camera;
     camera.position = glm::vec3(0.0);
@@ -31,14 +31,13 @@ void mainLoop(GLFWwindow *window, RenderPipeline *renderPipeline)
     {
         glfwPollEvents();
         InputState inputState = pollInput(window);
-
         updateCamera(&camera, inputState);
 
-        UniformData camInfo;
+        CamInfoBuffer camInfo;
         camInfo.camPos = glm::vec4(camera.position, 0);
         camInfo.camRotMat = camera.camToWorldRotMat();
 
-        drawFrame(renderPipeline, camInfo);
+        drawFrame(renderer, &camInfo);
     }
 }
 
@@ -46,15 +45,15 @@ int main()
 {
     glfwInit();
     GLFWwindow *window = createWindow("Vulkan Test App", WIDTH, HEIGHT);
+
+    Renderer renderer = createRenderer(window, enableValidationLayers);
+
     enableStickyKeys(window);
+    mainLoop(window, &renderer);
 
-    RenderPipeline renderPipeline = createRenderPipeline(window, enableValidationLayers, "shader.spv");
+    vkDeviceWaitIdle(renderer.device);
 
-    mainLoop(window, &renderPipeline);
-
-    vkDeviceWaitIdle(renderPipeline.device);
-
-    cleanupRenderPipeline(&renderPipeline);
+    cleanupRenderer(&renderer);
     glfwDestroyWindow(window);
     glfwTerminate();
 

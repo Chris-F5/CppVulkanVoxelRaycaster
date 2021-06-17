@@ -1,15 +1,26 @@
-#include "vulkan_device.hpp"
+#include "device.hpp"
 
 #include <iostream>
 #include <vector>
 #include <cstring>
 #include <set>
+
 #include "swapchain.hpp"
+#include "exceptions.hpp"
 
 const std::vector<const char *> validationLayers = {
     "VK_LAYER_KHRONOS_validation"};
 const std::vector<const char *> deviceExtensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+
+VkSurfaceKHR createSurface(VkInstance instance, GLFWwindow *window)
+{
+    VkSurfaceKHR surface;
+    handleVkResult(
+        glfwCreateWindowSurface(instance, window, nullptr, &surface),
+        "creating surface");
+    return surface;
+}
 
 bool checkValidationLayerSupport()
 {
@@ -38,16 +49,6 @@ bool checkValidationLayerSupport()
     }
 
     return true;
-}
-
-VkSurfaceKHR createSurface(VkInstance instance, GLFWwindow *window)
-{
-    VkSurfaceKHR surface;
-    if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS)
-    {
-        throw std::runtime_error("Failed to create window surface");
-    }
-    return surface;
 }
 
 VkInstance createInstance(const bool enableValidationLayers)
@@ -94,17 +95,10 @@ VkInstance createInstance(const bool enableValidationLayers)
     std::vector<VkExtensionProperties> extensions(extentionCount);
     vkEnumerateInstanceExtensionProperties(nullptr, &extentionCount, extensions.data());
 
-    std::cout << "avaliable extensions:" << std::endl;
-    for (const auto &extension : extensions)
-    {
-        std::cout << "\t" << extension.extensionName << std::endl;
-    }
-
     VkInstance instance;
-    if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS)
-    {
-        throw std::runtime_error("Failed to create instance");
-    }
+    handleVkResult(
+        vkCreateInstance(&createInfo, nullptr, &instance),
+        "creating vulkan instance");
 
     return instance;
 }
@@ -211,10 +205,9 @@ VkDevice createLogicalDevice(VkPhysicalDevice physicalDevice, bool enableValidat
     }
 
     VkDevice device;
-    if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &device) != VK_SUCCESS)
-    {
-        throw std::runtime_error("Failed to create logical device");
-    }
+    handleVkResult(
+        vkCreateDevice(physicalDevice, &createInfo, nullptr, &device),
+        "creating logical device");
 
     return device;
 }
@@ -233,7 +226,8 @@ QueueFamilyIndices findQueueFamilies(VkPhysicalDevice physicalDevice, VkSurfaceK
     for (const auto &queueFamily : queueFamilies)
     {
         if (queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT)
-        { // TODO: Check if not graphics
+        {
+            // TODO: Check if not graphics because that probably means compute part will be faster
             indices.computeFamily = i;
         }
         VkBool32 presentSupport = false;
@@ -242,6 +236,7 @@ QueueFamilyIndices findQueueFamilies(VkPhysicalDevice physicalDevice, VkSurfaceK
         {
             indices.presentFamily = i;
         }
+
         if (indices.isComplete())
         {
             break;

@@ -1,5 +1,8 @@
 #include "swapchain.hpp"
+
 #include <iostream>
+
+#include "exceptions.hpp"
 
 struct SwapchainSupportDetails
 {
@@ -138,10 +141,9 @@ std::vector<VkImageView> createImageViews(VkDevice device, std::vector<VkImage> 
         createInfo.subresourceRange.baseArrayLayer = 0;
         createInfo.subresourceRange.layerCount = 1;
 
-        if (vkCreateImageView(device, &createInfo, nullptr, &imageViews[i]) != VK_SUCCESS)
-        {
-            throw std::runtime_error("Failed to create image views");
-        }
+        handleVkResult(
+            vkCreateImageView(device, &createInfo, nullptr, &imageViews[i]),
+            "creating image view");
     }
 
     return imageViews;
@@ -208,21 +210,20 @@ Swapchain createSwapchain(VkDevice device, VkPhysicalDevice physicalDevice, GLFW
     createInfo.clipped = VK_TRUE;
     createInfo.oldSwapchain = VK_NULL_HANDLE;
 
-    if (vkCreateSwapchainKHR(device, &createInfo, nullptr, &swapchain.swapchain) != VK_SUCCESS)
-    {
-        throw std::runtime_error("Failed to create swapchain");
-    }
+    handleVkResult(
+        vkCreateSwapchainKHR(device, &createInfo, nullptr, &swapchain.swapchain),
+        "creating swapchain");
 
     swapchain.images = getSwapchainImages(device, swapchain.swapchain);
     swapchain.imageViews = createImageViews(device, swapchain.images, swapchain.surfaceFormat.format);
     return swapchain;
 }
 
-void Swapchain::cleanup(VkDevice device)
+void cleanupSwpachain(VkDevice device, Swapchain swapchain)
 {
-    for (auto imageView : imageViews)
+    for (auto imageView : swapchain.imageViews)
     {
         vkDestroyImageView(device, imageView, nullptr);
     }
-    vkDestroySwapchainKHR(device, swapchain, nullptr);
+    vkDestroySwapchainKHR(device, swapchain.swapchain, nullptr);
 }

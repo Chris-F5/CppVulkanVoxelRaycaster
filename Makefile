@@ -2,8 +2,8 @@ OUTPUTNAME = RayCaster
 CC = g++
 CFLAGS = -std=c++17 -O2
 LDFLAGS = -lglfw -lvulkan -ldl -lpthread -lX11 -lXxf86vm -lXrandr -lXi
-SRCS = $(wildcard src/*.cpp)
-OBJS = $(patsubst src/%.cpp,obj/%.o,$(SRCS))
+SRCS = $(shell find ./src -type f -name "*.cpp")
+OBJS = $(patsubst ./src/%.cpp, obj/%.o, $(SRCS))
 
 .PHONY: run clean all
 
@@ -14,7 +14,7 @@ target/$(OUTPUTNAME): $(OBJS)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 obj/%.o: src/%.cpp
-	mkdir -p obj
+	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@ $(LDFLAGS)
 
 target/%.spv: src/%.comp

@@ -3,9 +3,9 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#include "vulkan_device.hpp"
-
 #include <vector>
+
+#include "device.hpp"
 
 struct Swapchain
 {
@@ -18,9 +18,8 @@ struct Swapchain
     size_t currentFrame;
 
     uint32_t imageCount() { return images.size(); };
-
-    void cleanup(VkDevice device);
 };
 
-Swapchain createSwapchain(VkDevice device, VkPhysicalDevice physicalDevice, GLFWwindow *window, VkSurfaceKHR surface, QueueFamilyIndices queueFamilyIndices);
 bool checkSwapchainSupport(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface);
+Swapchain createSwapchain(VkDevice device, VkPhysicalDevice physicalDevice, GLFWwindow *window, VkSurfaceKHR surface, QueueFamilyIndices queueFamilyIndices);
+void cleanupSwapchain(VkDevice device, Swapchain swapchain);
