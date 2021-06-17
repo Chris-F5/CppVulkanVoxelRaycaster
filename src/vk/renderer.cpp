@@ -5,6 +5,30 @@
 #include "command_buffers.hpp"
 #include "exceptions.hpp"
 
+const uint NODE_TYPE_PARENT = 0;
+const uint NODE_TYPE_COLORED = 1;
+const uint NODE_TYPE_EMPTY = 2;
+const uint octree[] = {
+    //  Header              | R    G    B    |  Children......................
+    NODE_TYPE_PARENT, 000, 000, 000, 12, 24, 36, 48, 60, 72, 84, 96,
+    NODE_TYPE_EMPTY, 000, 000, 000, 00, 00, 00, 00, 00, 00, 00, 00,
+    NODE_TYPE_COLORED, 000, 255, 000, 00, 00, 00, 00, 00, 00, 00, 00,
+    NODE_TYPE_EMPTY, 000, 000, 255, 00, 00, 00, 00, 00, 00, 00, 00,
+    NODE_TYPE_COLORED, 255, 255, 000, 00, 00, 00, 00, 00, 00, 00, 00,
+    NODE_TYPE_COLORED, 255, 000, 255, 00, 00, 00, 00, 00, 00, 00, 00,
+    NODE_TYPE_COLORED, 000, 255, 255, 00, 00, 00, 00, 00, 00, 00, 00,
+    NODE_TYPE_PARENT, 255, 255, 255, 108, 120, 132, 144, 156, 168, 180, 192,
+    NODE_TYPE_PARENT, 255, 255, 255, 108, 168, 132, 144, 156, 168, 180, 204,
+    NODE_TYPE_COLORED, 000, 000, 000, 00, 00, 00, 00, 00, 00, 00, 00,
+    NODE_TYPE_EMPTY, 100, 000, 000, 00, 00, 00, 00, 00, 00, 00, 00,
+    NODE_TYPE_COLORED, 000, 100, 000, 00, 00, 00, 00, 00, 00, 00, 00,
+    NODE_TYPE_COLORED, 000, 000, 100, 00, 00, 00, 00, 00, 00, 00, 00,
+    NODE_TYPE_COLORED, 100, 100, 000, 00, 00, 00, 00, 00, 00, 00, 00,
+    NODE_TYPE_COLORED, 100, 000, 100, 00, 00, 00, 00, 00, 00, 00, 00,
+    NODE_TYPE_EMPTY, 000, 100, 100, 00, 00, 00, 00, 00, 00, 00, 00,
+    NODE_TYPE_COLORED, 100, 100, 100, 00, 00, 00, 00, 00, 00, 00, 00,
+    NODE_TYPE_PARENT, 000, 000, 000, 108, 120, 132, 144, 156, 168, 180, 192};
+
 Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
 {
     // DEVICE
@@ -26,8 +50,10 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
 
     // BUFFERS
 
-    VkBufferCreateInfo camInfoBufferCreateInfo;
+    VkBufferCreateInfo camInfoBufferCreateInfo{};
     camInfoBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    camInfoBufferCreateInfo.pNext = nullptr;
+    camInfoBufferCreateInfo.flags = 0;
     camInfoBufferCreateInfo.size = sizeof(CamInfoBuffer);
     camInfoBufferCreateInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
     camInfoBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -38,13 +64,21 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
         camInfoBuffers,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
-    // DESCRIPTOR SETS
+    VkBufferCreateInfo octreeBufferCreateInfo{};
+    octreeBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    camInfoBufferCreateInfo.pNext = nullptr;
+    camInfoBufferCreateInfo.flags = 0;
+    octreeBufferCreateInfo.size = sizeof(uint) * 240;
+    octreeBufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    octreeBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    VkBuffer octreeBuffer = createBuffers(device, &octreeBufferCreateInfo, 1)[0];
+    VkDeviceMemory octreeBufferMemory = allocateBuffers(
+        device,
+        physicalDevice,
+        std::vector<VkBuffer>{octreeBuffer},
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)[0];
 
-    DescriptorCreateInfo camInfoDescroptor{};
-    camInfoDescroptor.binding = 1;
-    camInfoDescroptor.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    camInfoDescroptor.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-    camInfoDescroptor.buffers = camInfoBuffers;
+    // DESCRIPTOR SETS
 
     DescriptorCreateInfo swapchainImageDescriptor{};
     swapchainImageDescriptor.binding = 0;
@@ -53,7 +87,20 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
     swapchainImageDescriptor.imageViews = swapchain.imageViews;
     swapchainImageDescriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
-    std::vector<DescriptorCreateInfo> descriptorInfos{swapchainImageDescriptor, camInfoDescroptor};
+    DescriptorCreateInfo camInfoDescroptor{};
+    camInfoDescroptor.binding = 1;
+    camInfoDescroptor.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    camInfoDescroptor.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    camInfoDescroptor.buffers = camInfoBuffers;
+
+    DescriptorCreateInfo octreeDescriptor{};
+    octreeDescriptor.binding = 2;
+    octreeDescriptor.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    octreeDescriptor.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    octreeDescriptor.buffers = std::vector<VkBuffer>(swapchain.imageCount(), octreeBuffer);
+
+    std::vector<DescriptorCreateInfo>
+        descriptorInfos{swapchainImageDescriptor, camInfoDescroptor, octreeDescriptor};
 
     DescriptorSets descriptorSets = createDescriptorSets(device, descriptorInfos, swapchain.imageCount());
 
@@ -90,6 +137,13 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
     // SYNCHRONIZATION OBJECTS
 
     SynchronizationObjects synchronizationObjects = createSynchronizationObjects(device);
+
+    // OCTREE
+
+    void *data;
+    vkMapMemory(device, octreeBufferMemory, 0, sizeof(octree), 0, &data);
+    memcpy(data, &octree, sizeof(octree));
+    vkUnmapMemory(device, octreeBufferMemory);
 
     // RETURN
 

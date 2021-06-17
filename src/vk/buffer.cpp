@@ -1,6 +1,7 @@
 #include <iostream>
 
 #include "buffer.hpp"
+#include "exceptions.hpp"
 
 uint32_t findMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties)
 {
@@ -35,10 +36,9 @@ std::vector<VkDeviceMemory> allocateBuffers(
         allocInfo.allocationSize = memReq.size;
         allocInfo.memoryTypeIndex = findMemoryType(physicalDevice, memReq.memoryTypeBits, memoryPropertyFlags);
 
-        if (vkAllocateMemory(device, &allocInfo, nullptr, &buffersMemory[i]) != VK_SUCCESS)
-        {
-            throw std::runtime_error("Failed to allocate buffer");
-        }
+        handleVkResult(
+            vkAllocateMemory(device, &allocInfo, nullptr, &buffersMemory[i]),
+            "allocating buffer");
 
         vkBindBufferMemory(device, buffers[i], buffersMemory[i], 0);
     }
@@ -54,10 +54,9 @@ std::vector<VkBuffer> createBuffers(
 
     for (size_t i = 0; i < count; i++)
     {
-        if (vkCreateBuffer(device, createInfo, nullptr, &buffers[i]) != VK_SUCCESS)
-        {
-            throw std::runtime_error("Failed to create buffer");
-        }
+        handleVkResult(
+            vkCreateBuffer(device, createInfo, nullptr, &buffers[i]),
+            "creating buffer");
     }
     return buffers;
 }

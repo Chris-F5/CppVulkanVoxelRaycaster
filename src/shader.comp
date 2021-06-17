@@ -10,6 +10,10 @@ layout (binding = 1) uniform CamInfo{
     mat4 rot;
 } camInfo;
 
+layout (binding = 2) buffer OctreeBuffer{
+    uint octree[];
+};
+
 const vec3 BACKGROUND_COLOR = vec3(0.1, 0.1, 0.2);
 
 const uint SUBNODE_X[] = {0, 1, 0, 1, 0, 1, 0, 1};
@@ -38,27 +42,6 @@ const uint NODE_TYPE_EMPTY = 2;
 
 const uint OCTREE_MAX_DEPTH = 4;
 const float OCTREE_ROOT_SIZE = 8;//pow(2, OCTREE_MAX_DEPTH - 1);
-const uint octree[] = {
-//  Header              | R    G    B    |  Children......................
-    NODE_TYPE_PARENT,     000, 000, 000,    12, 24, 36, 48, 60, 72, 84, 96,
-    NODE_TYPE_EMPTY,      000, 000, 000,    00, 00, 00, 00, 00, 00, 00, 00,
-    NODE_TYPE_COLORED,    000, 255, 000,    00, 00, 00, 00, 00, 00, 00, 00,
-    NODE_TYPE_EMPTY,    000, 000, 255,    00, 00, 00, 00, 00, 00, 00, 00,
-    NODE_TYPE_COLORED,    255, 255, 000,    00, 00, 00, 00, 00, 00, 00, 00,
-    NODE_TYPE_COLORED,    255, 000, 255,    00, 00, 00, 00, 00, 00, 00, 00,
-    NODE_TYPE_COLORED,    000, 255, 255,    00, 00, 00, 00, 00, 00, 00, 00,
-    NODE_TYPE_PARENT,     255, 255, 255,    108, 120, 132, 144, 156, 168, 180, 192,
-    NODE_TYPE_PARENT,     255, 255, 255,    108, 168, 132, 144, 156, 168, 180, 204,
-    NODE_TYPE_COLORED,    000, 000, 000,    00, 00, 00, 00, 00, 00, 00, 00,
-    NODE_TYPE_EMPTY,      100, 000, 000,    00, 00, 00, 00, 00, 00, 00, 00,
-    NODE_TYPE_COLORED,    000, 100, 000,    00, 00, 00, 00, 00, 00, 00, 00,
-    NODE_TYPE_COLORED,    000, 000, 100,    00, 00, 00, 00, 00, 00, 00, 00,
-    NODE_TYPE_COLORED,    100, 100, 000,    00, 00, 00, 00, 00, 00, 00, 00,
-    NODE_TYPE_COLORED,    100, 000, 100,    00, 00, 00, 00, 00, 00, 00, 00,
-    NODE_TYPE_EMPTY,    000, 100, 100,    00, 00, 00, 00, 00, 00, 00, 00,
-    NODE_TYPE_COLORED,    100, 100, 100,    00, 00, 00, 00, 00, 00, 00, 00,
-    NODE_TYPE_PARENT,     000, 000, 000,    108, 120, 132, 144, 156, 168, 180, 192
-};
 
 uint traversalPointers[OCTREE_MAX_DEPTH];
 uint traversalPath[OCTREE_MAX_DEPTH - 1];
