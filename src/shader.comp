@@ -79,7 +79,7 @@ void traverseDown(uint childIndex){
     traversalPath[currentDepth] = childIndex;
 
     uint currentNodePointer = traversalPointers[currentDepth];
-    uint childPointer = octree[currentNodePointer + 4 + childIndex];
+    uint childPointer = octree[currentNodePointer + 4] + childIndex * 5;
     
     currentDepth += 1;
     currentNodeSize /= 2;
