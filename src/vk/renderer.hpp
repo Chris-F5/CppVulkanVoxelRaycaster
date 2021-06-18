@@ -38,11 +38,15 @@ struct Renderer
     std::vector<VkBuffer> camInfoBuffers;
     std::vector<VkDeviceMemory> camInfoBuffersMemory;
 
+    VkBuffer octreeBuffer;
+    VkDeviceMemory octreeBufferMemory;
+
     Pipeline pipeline;
 
     CommandBuffers commandBuffers;
 
-    SynchronizationObjects synchronizationObjects;
+    VkSemaphore imageAvailableSemaphore;
+    VkSemaphore renderFinishSemaphore;
 };
 
 Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers);

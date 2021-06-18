@@ -136,7 +136,8 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
 
     // SYNCHRONIZATION OBJECTS
 
-    SynchronizationObjects synchronizationObjects = createSynchronizationObjects(device);
+    VkSemaphore imageAvailableSemaphore = createSemaphore(device);
+    VkSemaphore renderFinishSemaphore = createSemaphore(device);
 
     // OCTREE
 
@@ -159,9 +160,12 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
     renderer.descriptorSets = descriptorSets;
     renderer.camInfoBuffers = camInfoBuffers;
     renderer.camInfoBuffersMemory = camInfoBuffersMemory;
+    renderer.octreeBuffer = octreeBuffer;
+    renderer.octreeBufferMemory = octreeBufferMemory;
     renderer.pipeline = pipeline;
     renderer.commandBuffers = commandBuffers;
-    renderer.synchronizationObjects = synchronizationObjects;
+    renderer.imageAvailableSemaphore = imageAvailableSemaphore;
+    renderer.renderFinishSemaphore = renderFinishSemaphore;
 
     return renderer;
 }
@@ -173,7 +177,7 @@ void drawFrame(Renderer *renderer, CamInfoBuffer *camInfo)
         renderer->device,
         renderer->swapchain.swapchain,
         UINT64_MAX,
-        renderer->synchronizationObjects.imageAvailableSemaphore,
+        renderer->imageAvailableSemaphore,
         VK_NULL_HANDLE,
         &imageIndex);
 
@@ -188,12 +192,12 @@ void drawFrame(Renderer *renderer, CamInfoBuffer *camInfo)
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = &renderer->synchronizationObjects.imageAvailableSemaphore;
+    submitInfo.pWaitSemaphores = &renderer->imageAvailableSemaphore;
     submitInfo.pWaitDstStageMask = waitStages;
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &renderer->commandBuffers.buffers[imageIndex];
     submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = &renderer->synchronizationObjects.renderFinishedSemaphore;
+    submitInfo.pSignalSemaphores = &renderer->renderFinishSemaphore;
 
     handleVkResult(
         vkQueueSubmit(renderer->computeQueue, 1, &submitInfo, VK_NULL_HANDLE),
@@ -208,11 +212,42 @@ void drawFrame(Renderer *renderer, CamInfoBuffer *camInfo)
     presentInfo.pSwapchains = swapchains;
     presentInfo.pImageIndices = &imageIndex;
     presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = &renderer->synchronizationObjects.renderFinishedSemaphore;
+    presentInfo.pWaitSemaphores = &renderer->renderFinishSemaphore;
 
     vkQueuePresentKHR(renderer->presentQueue, &presentInfo);
+
+    vkDeviceWaitIdle(renderer->device);
 }
 
-void cleanupRenderer(Renderer *renderPipeline)
+void cleanupRenderer(Renderer *renderer)
 {
+    vkDestroySemaphore(renderer->device, renderer->imageAvailableSemaphore, nullptr);
+    vkDestroySemaphore(renderer->device, renderer->renderFinishSemaphore, nullptr);
+
+    vkDestroyCommandPool(renderer->device, renderer->commandBuffers.pool, nullptr);
+
+    vkDestroyDescriptorPool(renderer->device, renderer->descriptorSets.pool, nullptr);
+    vkDestroyDescriptorSetLayout(renderer->device, renderer->descriptorSets.layout, nullptr);
+
+    vkDestroyBuffer(renderer->device, renderer->octreeBuffer, nullptr);
+    vkFreeMemory(renderer->device, renderer->octreeBufferMemory, nullptr);
+
+    for (int i = 0; i < renderer->swapchain.imageCount(); i++)
+    {
+        vkDestroyBuffer(renderer->device, renderer->camInfoBuffers[i], nullptr);
+        vkFreeMemory(renderer->device, renderer->camInfoBuffersMemory[i], nullptr);
+    }
+
+    vkDestroyPipeline(renderer->device, renderer->pipeline.pipeline, nullptr);
+    vkDestroyPipelineLayout(renderer->device, renderer->pipeline.layout, nullptr);
+
+    for (VkImageView imageView : renderer->swapchain.imageViews)
+    {
+        vkDestroyImageView(renderer->device, imageView, nullptr);
+    }
+
+    vkDestroySwapchainKHR(renderer->device, renderer->swapchain.swapchain, nullptr);
+    vkDestroyDevice(renderer->device, nullptr);
+    vkDestroySurfaceKHR(renderer->instance, renderer->surface, nullptr);
+    vkDestroyInstance(renderer->instance, nullptr);
 }

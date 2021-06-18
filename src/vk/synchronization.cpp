@@ -16,12 +16,3 @@ VkSemaphore createSemaphore(VkDevice device)
 
     return semaphore;
 }
-
-SynchronizationObjects createSynchronizationObjects(VkDevice device)
-{
-    SynchronizationObjects synchronizationObjects{};
-    synchronizationObjects.imageAvailableSemaphore = createSemaphore(device);
-    synchronizationObjects.renderFinishedSemaphore = createSemaphore(device);
-
-    return synchronizationObjects;
-}
