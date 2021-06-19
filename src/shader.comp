@@ -40,8 +40,8 @@ const uint NODE_TYPE_PARENT = 0;
 const uint NODE_TYPE_COLORED = 1;
 const uint NODE_TYPE_EMPTY = 2;
 
-const uint OCTREE_MAX_DEPTH = 4;
-const float OCTREE_ROOT_SIZE = 8;//pow(2, OCTREE_MAX_DEPTH - 1);
+const uint OCTREE_MAX_DEPTH = 8;
+const float OCTREE_ROOT_SIZE = 128;//pow(2, OCTREE_MAX_DEPTH - 1);
 
 uint traversalPointers[OCTREE_MAX_DEPTH];
 uint traversalPath[OCTREE_MAX_DEPTH - 1];

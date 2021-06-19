@@ -5,11 +5,13 @@
 #include <glm/gtx/quaternion.hpp>
 
 #include <string>
+#include <iostream>
 
 #include "window.hpp"
 #include "vk/renderer.hpp"
 #include "input.hpp"
 #include "camera_controller.hpp"
+#include "octree_generator.hpp"
 
 #ifdef NDEBUG
 const bool enableValidationLayers = false;
@@ -25,7 +27,7 @@ void mainLoop(GLFWwindow *window, Renderer *renderer)
     Camera camera;
     camera.position = glm::vec3(0.0);
     camera.degreesRotation = glm::vec3(0.0);
-    camera.speed = 0.01;
+    camera.speed = 0.5;
 
     while (!glfwWindowShouldClose(window))
     {
@@ -43,10 +45,21 @@ void mainLoop(GLFWwindow *window, Renderer *renderer)
 
 int main()
 {
+    std::vector<uint> octree = getOctreeFromFile("scene.ply");
+    for (int i = 0; i < octree.size(); i += 5)
+    {
+        if ((i - 5) % 8 == 0)
+        {
+            std::cout << "--- " << i << " ---\n";
+        }
+        std::cout << octree[i] << " " << octree[i + 1] << " " << octree[i + 2] << " " << octree[i + 3] << " " << octree[i + 4] << "\n";
+    }
+
     glfwInit();
     GLFWwindow *window = createWindow("Vulkan Test App", WIDTH, HEIGHT);
 
-    Renderer renderer = createRenderer(window, enableValidationLayers);
+    // Depth of octree must be 8
+    Renderer renderer = createRenderer(window, enableValidationLayers, octree);
 
     enableStickyKeys(window);
     mainLoop(window, &renderer);

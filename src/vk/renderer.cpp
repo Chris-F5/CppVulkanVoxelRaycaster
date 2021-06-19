@@ -5,7 +5,7 @@
 #include "command_buffers.hpp"
 #include "exceptions.hpp"
 
-const uint NODE_TYPE_PARENT = 0;
+/*const uint NODE_TYPE_PARENT = 0;
 const uint NODE_TYPE_COLORED = 1;
 const uint NODE_TYPE_EMPTY = 2;
 const uint octree[] = {
@@ -28,9 +28,9 @@ const uint octree[] = {
     NODE_TYPE_COLORED, 100, 100, 000, 00,
     NODE_TYPE_COLORED, 100, 000, 100, 00,
     NODE_TYPE_EMPTY, 000, 100, 100, 00,
-    NODE_TYPE_COLORED, 100, 100, 100, 00};
+    NODE_TYPE_COLORED, 100, 100, 100, 00};*/
 
-Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
+Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers, std::vector<uint> octree)
 {
     // DEVICE
 
@@ -69,7 +69,7 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
     octreeBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     camInfoBufferCreateInfo.pNext = nullptr;
     camInfoBufferCreateInfo.flags = 0;
-    octreeBufferCreateInfo.size = sizeof(uint) * 240;
+    octreeBufferCreateInfo.size = sizeof(uint) * 1000000;
     octreeBufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     octreeBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     VkBuffer octreeBuffer = createBuffers(device, &octreeBufferCreateInfo, 1)[0];
@@ -143,8 +143,8 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
     // OCTREE
 
     void *data;
-    vkMapMemory(device, octreeBufferMemory, 0, sizeof(octree), 0, &data);
-    memcpy(data, &octree, sizeof(octree));
+    vkMapMemory(device, octreeBufferMemory, 0, octree.size() * sizeof(uint), 0, &data);
+    memcpy(data, octree.data(), octree.size() * sizeof(uint));
     vkUnmapMemory(device, octreeBufferMemory);
 
     // RETURN

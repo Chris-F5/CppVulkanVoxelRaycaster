@@ -49,6 +49,6 @@ struct Renderer
     VkSemaphore renderFinishSemaphore;
 };
 
-Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers);
+Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers, std::vector<uint> octree);
 void drawFrame(Renderer *rendrer, CamInfoBuffer *camInfo);
 void cleanupRenderer(Renderer *renderPipeline);

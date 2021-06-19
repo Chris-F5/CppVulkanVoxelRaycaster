@@ -65,18 +65,18 @@ void updateCamera(Camera *camera, InputState inputState)
 
     if (inputState.rightArrow)
     {
-        camera->degreesRotation.x += 0.1;
+        camera->degreesRotation.x += 0.3;
     }
     if (inputState.leftArrow)
     {
-        camera->degreesRotation.x -= 0.1;
+        camera->degreesRotation.x -= 0.3;
     }
     if (inputState.upArrow)
     {
-        camera->degreesRotation.y += 0.1;
+        camera->degreesRotation.y += 0.3;
     }
     if (inputState.downArrow)
     {
-        camera->degreesRotation.y -= 0.1;
+        camera->degreesRotation.y -= 0.3;
     }
 }
