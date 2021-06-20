@@ -160,11 +160,11 @@ void insertIntoOctree(
     octree->at(index + 4) = 0;
 }
 
-std::vector<uint> getOctreeFromFile(std::string filename)
+std::vector<uint32_t> getOctreeFromFile(std::string filename)
 {
     std::vector<int> raw = readPointmapFile(filename);
     uint depth = normalizeRawPointmapData(&raw);
-    std::vector<uint> octree{NODE_TYPE_EMPTY, 000, 000, 000, 0};
+    std::vector<uint32_t> octree{NODE_TYPE_EMPTY, 000, 000, 000, 0};
     for (int i = 0; i < raw.size(); i += 6)
     {
         uint x = raw[i];

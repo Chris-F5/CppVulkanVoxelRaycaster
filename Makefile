@@ -1,7 +1,7 @@
 OUTPUTNAME = RayCaster
-CC = g++
+CC = gcc
 CFLAGS = -std=c++17 -O2
-LDFLAGS = -lglfw -lvulkan -ldl -lpthread -lX11 -lXxf86vm -lXrandr -lXi
+LDFLAGS = -lstdc++ -lglfw -lvulkan -ldl -lpthread -lX11 -lXxf86vm -lXrandr -lXi -lm
 SRCS = $(shell find ./src -type f -name "*.cpp")
 OBJS = $(patsubst ./src/%.cpp, obj/%.o, $(SRCS))
 

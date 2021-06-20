@@ -3,4 +3,4 @@
 #include <vector>
 #include <string>
 
-std::vector<uint> getOctreeFromFile(std::string filename);
+std::vector<uint32_t> getOctreeFromFile(std::string filename);

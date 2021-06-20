@@ -16,3 +16,15 @@ VkSemaphore createSemaphore(VkDevice device)
 
     return semaphore;
 }
+
+VkFence createFence(VkDevice device, VkFenceCreateFlags flags){
+    VkFenceCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    createInfo.pNext = nullptr;
+    createInfo.flags = flags;
+    VkFence fence;
+    handleVkResult(
+        vkCreateFence(device, &createInfo, nullptr, &fence),
+        "creating fence");
+    return fence;
+}

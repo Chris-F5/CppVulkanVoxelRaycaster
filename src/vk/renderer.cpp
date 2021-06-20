@@ -5,49 +5,29 @@
 #include "command_buffers.hpp"
 #include "exceptions.hpp"
 
-/*const uint NODE_TYPE_PARENT = 0;
-const uint NODE_TYPE_COLORED = 1;
-const uint NODE_TYPE_EMPTY = 2;
-const uint octree[] = {
-    //  Header              | R    G    B    |  Children
-    NODE_TYPE_PARENT, 000, 000, 000, 5,
-
-    NODE_TYPE_EMPTY, 000, 000, 000, 00,
-    NODE_TYPE_COLORED, 000, 255, 000, 00,
-    NODE_TYPE_EMPTY, 000, 000, 255, 00,
-    NODE_TYPE_COLORED, 255, 255, 000, 00,
-    NODE_TYPE_COLORED, 255, 000, 255, 00,
-    NODE_TYPE_COLORED, 000, 255, 255, 00,
-    NODE_TYPE_PARENT, 255, 255, 255, 45,
-    NODE_TYPE_PARENT, 255, 255, 255, 45,
-
-    NODE_TYPE_COLORED, 000, 000, 000, 00,
-    NODE_TYPE_EMPTY, 100, 000, 000, 00,
-    NODE_TYPE_COLORED, 000, 100, 000, 00,
-    NODE_TYPE_COLORED, 000, 000, 100, 00,
-    NODE_TYPE_COLORED, 100, 100, 000, 00,
-    NODE_TYPE_COLORED, 100, 000, 100, 00,
-    NODE_TYPE_EMPTY, 000, 100, 100, 00,
-    NODE_TYPE_COLORED, 100, 100, 100, 00};*/
-
-Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers, std::vector<uint> octree)
+Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
 {
+    Renderer renderer{};
+    renderer.currentFrame = 0;
+
     // DEVICE
 
-    VkInstance instance = createInstance(enableValidationLayers);
-    VkSurfaceKHR surface = createSurface(instance, window);
-    VkPhysicalDevice physicalDevice = pickPhysicalDevice(instance, surface);
-    QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice, surface);
-    VkDevice device = createLogicalDevice(physicalDevice, enableValidationLayers, queueFamilyIndices);
+    renderer.instance = createInstance(enableValidationLayers);
+    renderer.surface = createSurface(renderer.instance, window);
+    renderer.physicalDevice = pickPhysicalDevice(renderer.instance, renderer.surface);
+    renderer.queueFamilyIndices = findQueueFamilies(renderer.physicalDevice, renderer.surface);
+    renderer.device = createLogicalDevice(renderer.physicalDevice, enableValidationLayers, renderer.queueFamilyIndices);
 
-    VkQueue computeQueue;
-    vkGetDeviceQueue(device, queueFamilyIndices.computeFamily.value(), 0, &computeQueue);
-    VkQueue presentQueue;
-    vkGetDeviceQueue(device, queueFamilyIndices.presentFamily.value(), 0, &presentQueue);
+    vkGetDeviceQueue(renderer.device, renderer.queueFamilyIndices.computeFamily.value(), 0, &renderer.computeQueue);
+    vkGetDeviceQueue(renderer.device, renderer.queueFamilyIndices.presentFamily.value(), 0, &renderer.presentQueue);
 
     // SWAPCHAIN
 
-    Swapchain swapchain = createSwapchain(device, physicalDevice, window, surface, queueFamilyIndices);
+    renderer.swapchain = createSwapchain(
+        renderer.device,
+        renderer.physicalDevice,
+        window, renderer.surface,
+        renderer.queueFamilyIndices);
 
     // BUFFERS
 
@@ -58,11 +38,12 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers, std::ve
     camInfoBufferCreateInfo.size = sizeof(CamInfoBuffer);
     camInfoBufferCreateInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
     camInfoBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    std::vector<VkBuffer> camInfoBuffers = createBuffers(device, &camInfoBufferCreateInfo, swapchain.imageCount());
-    std::vector<VkDeviceMemory> camInfoBuffersMemory = allocateBuffers(
-        device,
-        physicalDevice,
-        camInfoBuffers,
+
+    renderer.camInfoBuffers = createBuffers(renderer.device, &camInfoBufferCreateInfo, renderer.swapchain.imageCount());
+    renderer.camInfoBuffersMemory = allocateBuffers(
+        renderer.device,
+        renderer.physicalDevice,
+        renderer.camInfoBuffers,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
     VkBufferCreateInfo octreeBufferCreateInfo{};
@@ -72,11 +53,12 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers, std::ve
     octreeBufferCreateInfo.size = sizeof(uint) * 1000000;
     octreeBufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     octreeBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    VkBuffer octreeBuffer = createBuffers(device, &octreeBufferCreateInfo, 1)[0];
-    VkDeviceMemory octreeBufferMemory = allocateBuffers(
-        device,
-        physicalDevice,
-        std::vector<VkBuffer>{octreeBuffer},
+
+    renderer.octreeBuffer = createBuffers(renderer.device, &octreeBufferCreateInfo, 1)[0];
+    renderer.octreeBufferMemory = allocateBuffers(
+        renderer.device,
+        renderer.physicalDevice,
+        std::vector<VkBuffer>{renderer.octreeBuffer},
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)[0];
 
     // DESCRIPTOR SETS
@@ -85,102 +67,93 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers, std::ve
     swapchainImageDescriptor.binding = 0;
     swapchainImageDescriptor.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     swapchainImageDescriptor.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-    swapchainImageDescriptor.imageViews = swapchain.imageViews;
+    swapchainImageDescriptor.imageViews = renderer.swapchain.imageViews;
     swapchainImageDescriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
     DescriptorCreateInfo camInfoDescroptor{};
     camInfoDescroptor.binding = 1;
     camInfoDescroptor.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     camInfoDescroptor.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-    camInfoDescroptor.buffers = camInfoBuffers;
+    camInfoDescroptor.buffers = renderer.camInfoBuffers;
 
     DescriptorCreateInfo octreeDescriptor{};
     octreeDescriptor.binding = 2;
     octreeDescriptor.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     octreeDescriptor.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-    octreeDescriptor.buffers = std::vector<VkBuffer>(swapchain.imageCount(), octreeBuffer);
+    octreeDescriptor.buffers = std::vector<VkBuffer>(renderer.swapchain.imageCount(), renderer.octreeBuffer);
 
     std::vector<DescriptorCreateInfo>
         descriptorInfos{swapchainImageDescriptor, camInfoDescroptor, octreeDescriptor};
 
-    DescriptorSets descriptorSets = createDescriptorSets(device, descriptorInfos, swapchain.imageCount());
+    renderer.descriptorSets = createDescriptorSets(renderer.device, descriptorInfos, renderer.swapchain.imageCount());
 
     // PIPELINE
 
-    VkShaderModule renderShader = createShaderModule(device, "shader.spv");
+    VkShaderModule renderShader = createShaderModule(renderer.device, "shader.spv");
 
     PipelineCreateInfo pipelineCreateInfo{};
     pipelineCreateInfo.computeShader = renderShader;
     pipelineCreateInfo.descriptorSetLayouts =
-        std::vector<VkDescriptorSetLayout>{descriptorSets.layout};
+        std::vector<VkDescriptorSetLayout>{renderer.descriptorSets.layout};
     pipelineCreateInfo.computeShaderStageCreateFlags = 0;
     pipelineCreateInfo.pipelineCreateFlags = 0;
 
-    Pipeline pipeline = createPipeline(device, pipelineCreateInfo);
+    renderer.pipeline = createPipeline(renderer.device, pipelineCreateInfo);
 
     // COMMAND BUFFERS
 
     CommandBuffersCreateInfo commandBufferInfo{};
-    commandBufferInfo.count = swapchain.imageCount();
-    commandBufferInfo.queueFamilies = queueFamilyIndices;
+    commandBufferInfo.count = renderer.swapchain.imageCount();
+    commandBufferInfo.queueFamilies = renderer.queueFamilyIndices;
     commandBufferInfo.poolCreateFlags = 0;
     commandBufferInfo.usageFlags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
-    commandBufferInfo.pipeline = pipeline;
+    commandBufferInfo.pipeline = renderer.pipeline;
     commandBufferInfo.descriptorSets =
-        std::vector<DescriptorSets>{descriptorSets};
-    commandBufferInfo.images = swapchain.images;
-    commandBufferInfo.imageExtent = swapchain.extent;
+        std::vector<DescriptorSets>{renderer.descriptorSets};
+    commandBufferInfo.images = renderer.swapchain.images;
+    commandBufferInfo.imageExtent = renderer.swapchain.extent;
 
-    CommandBuffers commandBuffers = createCommandBuffers(device, commandBufferInfo);
+    renderer.commandBuffers = createCommandBuffers(renderer.device, commandBufferInfo);
 
-    vkDestroyShaderModule(device, renderShader, nullptr);
+    vkDestroyShaderModule(renderer.device, renderShader, nullptr);
 
     // SYNCHRONIZATION OBJECTS
-
-    VkSemaphore imageAvailableSemaphore = createSemaphore(device);
-    VkSemaphore renderFinishSemaphore = createSemaphore(device);
-
-    // OCTREE
-
-    void *data;
-    vkMapMemory(device, octreeBufferMemory, 0, octree.size() * sizeof(uint), 0, &data);
-    memcpy(data, octree.data(), octree.size() * sizeof(uint));
-    vkUnmapMemory(device, octreeBufferMemory);
-
-    // RETURN
-
-    Renderer renderer{};
-    renderer.instance = instance;
-    renderer.physicalDevice = physicalDevice;
-    renderer.device = device;
-    renderer.surface = surface;
-    renderer.queueFamilyIndices = queueFamilyIndices;
-    renderer.computeQueue = computeQueue;
-    renderer.presentQueue = presentQueue;
-    renderer.swapchain = swapchain;
-    renderer.descriptorSets = descriptorSets;
-    renderer.camInfoBuffers = camInfoBuffers;
-    renderer.camInfoBuffersMemory = camInfoBuffersMemory;
-    renderer.octreeBuffer = octreeBuffer;
-    renderer.octreeBufferMemory = octreeBufferMemory;
-    renderer.pipeline = pipeline;
-    renderer.commandBuffers = commandBuffers;
-    renderer.imageAvailableSemaphore = imageAvailableSemaphore;
-    renderer.renderFinishSemaphore = renderFinishSemaphore;
+    for(int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++){
+        renderer.imageAvailableSemaphores[i] = createSemaphore(renderer.device);
+        renderer.renderFinishSemaphores[i] = createSemaphore(renderer.device);
+        renderer.inFlightFences[i] = createFence(renderer.device, VK_FENCE_CREATE_SIGNALED_BIT);
+    }
+    renderer.imagesInFlight = std::vector<VkFence>(renderer.swapchain.imageCount(), VK_NULL_HANDLE);
 
     return renderer;
 }
 
+void updateOctree(Renderer *renderer, uint32_t* octree, size_t octreeSize){
+    size_t memorySize = octreeSize * sizeof(uint);
+    void *data;
+    vkMapMemory(renderer->device, renderer->octreeBufferMemory, 0, memorySize , 0, &data);
+    memcpy(data, octree, memorySize);
+    vkUnmapMemory(renderer->device, renderer->octreeBufferMemory);
+}
+
 void drawFrame(Renderer *renderer, CamInfoBuffer *camInfo)
 {
+    vkWaitForFences(renderer->device, 1, &renderer->inFlightFences[renderer->currentFrame], VK_TRUE, UINT64_MAX);
+
     uint32_t imageIndex;
     vkAcquireNextImageKHR(
         renderer->device,
         renderer->swapchain.swapchain,
         UINT64_MAX,
-        renderer->imageAvailableSemaphore,
+        renderer->imageAvailableSemaphores[renderer->currentFrame],
         VK_NULL_HANDLE,
         &imageIndex);
+
+    if(renderer->imagesInFlight[imageIndex] != VK_NULL_HANDLE){
+        vkWaitForFences(renderer->device, 1, &renderer->imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
+    }
+    renderer->imagesInFlight[imageIndex] = renderer->inFlightFences[renderer->currentFrame];
+    vkResetFences(renderer->device, 1, &renderer->inFlightFences[renderer->currentFrame]);
 
     // TODO: "push constants" are faster way to push small buffers to shaders
     void *data;
@@ -193,15 +166,15 @@ void drawFrame(Renderer *renderer, CamInfoBuffer *camInfo)
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = &renderer->imageAvailableSemaphore;
+    submitInfo.pWaitSemaphores = &renderer->imageAvailableSemaphores[renderer->currentFrame];
     submitInfo.pWaitDstStageMask = waitStages;
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &renderer->commandBuffers.buffers[imageIndex];
     submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = &renderer->renderFinishSemaphore;
+    submitInfo.pSignalSemaphores = &renderer->renderFinishSemaphores[renderer->currentFrame];
 
     handleVkResult(
-        vkQueueSubmit(renderer->computeQueue, 1, &submitInfo, VK_NULL_HANDLE),
+        vkQueueSubmit(renderer->computeQueue, 1, &submitInfo, renderer->inFlightFences[renderer->currentFrame]),
         "submitting compute queue");
 
     VkPresentInfoKHR presentInfo{};
@@ -213,17 +186,20 @@ void drawFrame(Renderer *renderer, CamInfoBuffer *camInfo)
     presentInfo.pSwapchains = swapchains;
     presentInfo.pImageIndices = &imageIndex;
     presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = &renderer->renderFinishSemaphore;
+    presentInfo.pWaitSemaphores = &renderer->renderFinishSemaphores[renderer->currentFrame];
 
     vkQueuePresentKHR(renderer->presentQueue, &presentInfo);
 
-    vkDeviceWaitIdle(renderer->device);
+    renderer->currentFrame = (renderer->currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
 void cleanupRenderer(Renderer *renderer)
 {
-    vkDestroySemaphore(renderer->device, renderer->imageAvailableSemaphore, nullptr);
-    vkDestroySemaphore(renderer->device, renderer->renderFinishSemaphore, nullptr);
+    for(int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++){
+        vkDestroySemaphore(renderer->device, renderer->imageAvailableSemaphores[i], nullptr);
+        vkDestroySemaphore(renderer->device, renderer->renderFinishSemaphores[i], nullptr);
+        vkDestroyFence(renderer->device, renderer->inFlightFences[i], nullptr);
+    }
 
     vkDestroyCommandPool(renderer->device, renderer->commandBuffers.pool, nullptr);
 

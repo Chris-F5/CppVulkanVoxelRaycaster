@@ -15,6 +15,8 @@
 #include "synchronization.hpp"
 #include "command_buffers.hpp"
 
+const size_t MAX_FRAMES_IN_FLIGHT = 3;
+
 struct CamInfoBuffer
 {
     glm::vec4 camPos;
@@ -45,10 +47,15 @@ struct Renderer
 
     CommandBuffers commandBuffers;
 
-    VkSemaphore imageAvailableSemaphore;
-    VkSemaphore renderFinishSemaphore;
+    VkSemaphore imageAvailableSemaphores[MAX_FRAMES_IN_FLIGHT];
+    VkSemaphore renderFinishSemaphores[MAX_FRAMES_IN_FLIGHT];
+    VkFence inFlightFences[MAX_FRAMES_IN_FLIGHT];
+    std::vector<VkFence> imagesInFlight;
+
+    uint32_t currentFrame;
 };
 
-Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers, std::vector<uint> octree);
+Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers);
+void updateOctree(Renderer *renderer, uint* octree, size_t octreeSize);
 void drawFrame(Renderer *rendrer, CamInfoBuffer *camInfo);
 void cleanupRenderer(Renderer *renderPipeline);

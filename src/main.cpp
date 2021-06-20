@@ -46,20 +46,12 @@ void mainLoop(GLFWwindow *window, Renderer *renderer)
 int main()
 {
     std::vector<uint> octree = getOctreeFromFile("scene.ply");
-    for (int i = 0; i < octree.size(); i += 5)
-    {
-        if ((i - 5) % 8 == 0)
-        {
-            std::cout << "--- " << i << " ---\n";
-        }
-        std::cout << octree[i] << " " << octree[i + 1] << " " << octree[i + 2] << " " << octree[i + 3] << " " << octree[i + 4] << "\n";
-    }
 
     glfwInit();
     GLFWwindow *window = createWindow("Vulkan Test App", WIDTH, HEIGHT);
 
-    // Depth of octree must be 8
-    Renderer renderer = createRenderer(window, enableValidationLayers, octree);
+    Renderer renderer = createRenderer(window, enableValidationLayers);
+    updateOctree(&renderer, octree.data(), octree.size());
 
     enableStickyKeys(window);
     mainLoop(window, &renderer);
