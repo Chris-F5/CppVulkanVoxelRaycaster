@@ -23,6 +23,8 @@ InputState pollInput(GLFWwindow *window)
     state.leftShift = isKeyDown(window, GLFW_KEY_LEFT_SHIFT);
     state.space = isKeyDown(window, GLFW_KEY_SPACE);
 
+    state.p = isKeyDown(window, GLFW_KEY_P);
+
     return state;
 }
 

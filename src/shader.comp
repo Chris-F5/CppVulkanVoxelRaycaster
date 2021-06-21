@@ -41,7 +41,7 @@ const uint NODE_TYPE_COLORED = 1;
 const uint NODE_TYPE_EMPTY = 2;
 
 const uint OCTREE_MAX_DEPTH = 8;
-const float OCTREE_ROOT_SIZE = 128;//pow(2, OCTREE_MAX_DEPTH - 1);
+const float OCTREE_ROOT_SIZE = 128; //pow(2, OCTREE_MAX_DEPTH - 1);
 
 uint traversalPointers[OCTREE_MAX_DEPTH];
 uint traversalPath[OCTREE_MAX_DEPTH - 1];
@@ -52,6 +52,8 @@ vec3 currentNodePos;
 uint currentRaySubnodeTransformX;
 uint currentRaySubnodeTransformY;
 uint currentRaySubnodeTransformZ;
+
+uint steps = 0;
 
 uint nodeType(){
     return octree[traversalPointers[currentDepth]];
@@ -196,6 +198,7 @@ float castInternalRay(const vec3 pos, const vec3 dir){
     }
 
     while(true){
+        steps += 1;
         float tx = (currentNodePos.x + (xOffset * currentNodeSize) - pos.x) / dir.x;
         float ty = (currentNodePos.y + (yOffset * currentNodeSize) - pos.y) / dir.y;
         float tz = (currentNodePos.z + (zOffset * currentNodeSize) - pos.z) / dir.z;
@@ -228,7 +231,6 @@ void main(){
 
     vec3 color;
 
-    // If out of bounds then black screen
     if (pos.x <= 0 ||
         pos.x > OCTREE_ROOT_SIZE ||
         pos.y <= 0 ||
@@ -246,7 +248,6 @@ void main(){
         float tmax = min(min(max(tx0, tx1), max(ty0, ty1)), max(tz0, tz1));
         vec3 color;
         if(tmin < tmax && tmin > 0){
-            color = vec3(1,1,1);
             pos = dir * tmin + pos;
         }else{
             imageStore( image, ivec2(gl_WorkGroupID.xy), vec4(BACKGROUND_COLOR, 1.0) );
@@ -263,9 +264,10 @@ void main(){
         color = BACKGROUND_COLOR;
     }else{
         color = nodeColor();
+        color = vec3(0,0,0);
     }
 
-
+    color.r = steps / 50.0;
 
 	imageStore( image, ivec2(gl_WorkGroupID.xy), vec4(color, 1.0) );
 }

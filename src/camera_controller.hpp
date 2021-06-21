@@ -8,6 +8,7 @@
 struct Camera
 {
     float speed;
+    float rotateSpeed;
     glm::vec3 position;
     glm::vec3 degreesRotation;
 
@@ -17,4 +18,4 @@ struct Camera
     glm::mat4 camToWorldRotMat();
 };
 
-void updateCamera(Camera *camera, InputState inputState);
+void updateCamera(Camera *camera, InputState inputState, float deltaTime);

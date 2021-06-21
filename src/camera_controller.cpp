@@ -36,47 +36,47 @@ glm::mat4 Camera::camToWorldRotMat()
     return glm::toMat4(camRotation);
 }
 
-void updateCamera(Camera *camera, InputState inputState)
+void updateCamera(Camera *camera, InputState inputState, float deltaTime)
 {
     if (inputState.d)
     {
-        camera->position += camera->rightDirection() * camera->speed;
+        camera->position += camera->rightDirection() * camera->speed * deltaTime;
     }
     if (inputState.a)
     {
-        camera->position -= camera->rightDirection() * camera->speed;
+        camera->position -= camera->rightDirection() * camera->speed * deltaTime;
     }
     if (inputState.w)
     {
-        camera->position += camera->forwardDirection() * camera->speed;
+        camera->position += camera->forwardDirection() * camera->speed * deltaTime;
     }
     if (inputState.s)
     {
-        camera->position -= camera->forwardDirection() * camera->speed;
+        camera->position -= camera->forwardDirection() * camera->speed * deltaTime;
     }
     if (inputState.space)
     {
-        camera->position.y += camera->speed;
+        camera->position.y += camera->speed * deltaTime;
     }
     if (inputState.leftShift)
     {
-        camera->position.y -= camera->speed;
+        camera->position.y -= camera->speed * deltaTime;
     }
 
     if (inputState.rightArrow)
     {
-        camera->degreesRotation.x += 0.3;
+        camera->degreesRotation.x += camera->rotateSpeed * deltaTime;
     }
     if (inputState.leftArrow)
     {
-        camera->degreesRotation.x -= 0.3;
+        camera->degreesRotation.x -= camera->rotateSpeed* deltaTime;
     }
     if (inputState.upArrow)
     {
-        camera->degreesRotation.y += 0.3;
+        camera->degreesRotation.y += camera->rotateSpeed * deltaTime;
     }
     if (inputState.downArrow)
     {
-        camera->degreesRotation.y -= 0.3;
+        camera->degreesRotation.y -= camera->rotateSpeed * deltaTime;
     }
 }
