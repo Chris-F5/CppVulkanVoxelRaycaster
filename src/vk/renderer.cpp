@@ -33,48 +33,53 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
 
     // BUFFERS
 
-    VkBufferCreateInfo camInfoBufferCreateInfo{};
-    camInfoBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    camInfoBufferCreateInfo.pNext = nullptr;
-    camInfoBufferCreateInfo.flags = 0;
-    camInfoBufferCreateInfo.size = sizeof(CamInfoBuffer);
-    camInfoBufferCreateInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-    camInfoBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    renderer.camInfoBuffers.resize(renderer.swapchain.imageCount());
+    createBuffers(
+        renderer.device,
+        0,
+        sizeof(CamInfoBuffer),
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        renderer.camInfoBuffers.size(),
+        renderer.camInfoBuffers.data());
 
-    renderer.camInfoBuffers = createBuffers(renderer.device, &camInfoBufferCreateInfo, renderer.swapchain.imageCount());
-    renderer.camInfoBuffersMemory = allocateBuffers(
+    renderer.camInfoBuffersMemory.resize(renderer.swapchain.imageCount());
+    allocateBuffers(
         renderer.device,
         renderer.physicalDevice,
-        renderer.camInfoBuffers,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-    VkBufferCreateInfo octreeStagingBufferCreateInfo{};
-    octreeStagingBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    octreeStagingBufferCreateInfo.pNext = nullptr;
-    octreeStagingBufferCreateInfo.flags = 0;
-    octreeStagingBufferCreateInfo.size = OCTREE_BUFFER_SIZE;
-    octreeStagingBufferCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-    renderer.octreeStagingBuffer = createBuffers(renderer.device, &octreeStagingBufferCreateInfo, 1)[0];
-    renderer.octreeStagingBufferMemory = allocateBuffers(
+        renderer.camInfoBuffers.size(),
+        renderer.camInfoBuffers.data(),
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        renderer.camInfoBuffersMemory.data());
+    
+    createBuffers(
+        renderer.device,
+        0,
+        OCTREE_BUFFER_SIZE,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        1,
+        &renderer.octreeStagingBuffer);
+    allocateBuffers(
         renderer.device,
         renderer.physicalDevice,
-        std::vector<VkBuffer>{renderer.octreeStagingBuffer},
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)[0];
+        1,
+        &renderer.octreeStagingBuffer,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        &renderer.octreeStagingBufferMemory);
 
-    VkBufferCreateInfo octreeBufferCreateInfo{};
-    octreeBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    camInfoBufferCreateInfo.pNext = nullptr;
-    camInfoBufferCreateInfo.flags = 0;
-    octreeBufferCreateInfo.size = OCTREE_BUFFER_SIZE;
-    octreeBufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    octreeBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-    renderer.octreeBuffer = createBuffers(renderer.device, &octreeBufferCreateInfo, 1)[0];
-    renderer.octreeBufferMemory = allocateBuffers(
+    createBuffers(
+        renderer.device,
+        0,
+        OCTREE_BUFFER_SIZE,
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        1,
+        &renderer.octreeBuffer);
+    allocateBuffers(
         renderer.device,
         renderer.physicalDevice,
-        std::vector<VkBuffer>{renderer.octreeBuffer},
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)[0];
+        1,
+        &renderer.octreeBuffer,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        &renderer.octreeBufferMemory);
 
     // DESCRIPTOR SETS
 

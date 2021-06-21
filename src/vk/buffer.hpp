@@ -1,15 +1,19 @@
 #pragma once
 
 #include <vulkan/vulkan.h>
-#include <vector>
 
-std::vector<VkBuffer> createBuffers(
+void createBuffers(
     VkDevice device,
-    VkBufferCreateInfo *createInfo,
-    size_t count);
+    VkBufferCreateFlags flags,
+    VkDeviceSize size,
+    VkBufferUsageFlags usageFlags,
+    size_t count,
+    VkBuffer *buffers);
 
-std::vector<VkDeviceMemory> allocateBuffers(
+void allocateBuffers(
     VkDevice device,
     VkPhysicalDevice physicalDevice,
-    std::vector<VkBuffer> buffers,
-    VkMemoryPropertyFlags memoryPropertyFlags);
+    uint32_t count,
+    VkBuffer *buffers,
+    VkMemoryPropertyFlags memoryPropertyFlags,
+    VkDeviceMemory *buffersMemory);

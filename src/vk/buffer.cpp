@@ -1,7 +1,33 @@
+#include "buffer.hpp"
+
 #include <iostream>
 
-#include "buffer.hpp"
 #include "exceptions.hpp"
+
+void createBuffers(
+    VkDevice device,
+    VkBufferCreateFlags flags,
+    VkDeviceSize size,
+    VkBufferUsageFlags usageFlags,
+    size_t count,
+    VkBuffer *buffers)
+{
+    VkBufferCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    createInfo.pNext = nullptr;
+    createInfo.flags = flags;
+    createInfo.size = size;
+    createInfo.usage = usageFlags;
+    createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    for (size_t i = 0; i < count; i++)
+    {
+        handleVkResult(
+            vkCreateBuffer(device, &createInfo, nullptr, &buffers[i]),
+            "creating buffer");
+    }
+}
+
 
 uint32_t findMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties)
 {
@@ -19,14 +45,15 @@ uint32_t findMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter, Vk
     throw std::runtime_error("Failed to find suitable memory type");
 }
 
-std::vector<VkDeviceMemory> allocateBuffers(
+void allocateBuffers(
     VkDevice device,
     VkPhysicalDevice physicalDevice,
-    std::vector<VkBuffer> buffers,
-    VkMemoryPropertyFlags memoryPropertyFlags)
+    uint32_t count,
+    VkBuffer *buffers,
+    VkMemoryPropertyFlags memoryPropertyFlags,
+    VkDeviceMemory *buffersMemory)
 {
-    std::vector<VkDeviceMemory> buffersMemory(buffers.size());
-    for (size_t i = 0; i < buffers.size(); i++)
+    for (size_t i = 0; i < count; i++)
     {
         VkMemoryRequirements memReq;
         vkGetBufferMemoryRequirements(device, buffers[i], &memReq);
@@ -42,21 +69,4 @@ std::vector<VkDeviceMemory> allocateBuffers(
 
         vkBindBufferMemory(device, buffers[i], buffersMemory[i], 0);
     }
-    return buffersMemory;
-}
-
-std::vector<VkBuffer> createBuffers(
-    VkDevice device,
-    VkBufferCreateInfo *createInfo,
-    size_t count)
-{
-    std::vector<VkBuffer> buffers(count);
-
-    for (size_t i = 0; i < count; i++)
-    {
-        handleVkResult(
-            vkCreateBuffer(device, createInfo, nullptr, &buffers[i]),
-            "creating buffer");
-    }
-    return buffers;
 }
