@@ -51,7 +51,7 @@ int main()
     GLFWwindow *window = createWindow("Vulkan Test App", WIDTH, HEIGHT);
 
     Renderer renderer = createRenderer(window, enableValidationLayers);
-    updateOctree(&renderer, octree.data(), octree.size());
+    updateOctree(&renderer, octree.size(), octree.data());
 
     enableStickyKeys(window);
     mainLoop(window, &renderer);

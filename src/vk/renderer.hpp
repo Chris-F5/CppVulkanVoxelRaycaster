@@ -40,12 +40,18 @@ struct Renderer
     std::vector<VkBuffer> camInfoBuffers;
     std::vector<VkDeviceMemory> camInfoBuffersMemory;
 
+    VkBuffer octreeStagingBuffer;
+    VkDeviceMemory octreeStagingBufferMemory;
+
     VkBuffer octreeBuffer;
     VkDeviceMemory octreeBufferMemory;
 
     Pipeline pipeline;
 
-    CommandBuffers commandBuffers;
+    VkCommandPool computeCommandPool;
+    VkCommandPool transientComputeCommandPool;
+
+    std::vector<VkCommandBuffer> renderCommandBuffers;
 
     VkSemaphore imageAvailableSemaphores[MAX_FRAMES_IN_FLIGHT];
     VkSemaphore renderFinishSemaphores[MAX_FRAMES_IN_FLIGHT];
@@ -56,6 +62,6 @@ struct Renderer
 };
 
 Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers);
-void updateOctree(Renderer *renderer, uint* octree, size_t octreeSize);
+void updateOctree(Renderer *renderer, size_t octreeSize, uint32_t* octree);
 void drawFrame(Renderer *rendrer, CamInfoBuffer *camInfo);
 void cleanupRenderer(Renderer *renderPipeline);

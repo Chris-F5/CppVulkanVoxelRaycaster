@@ -8,22 +8,30 @@
 #include "descriptor_set.hpp"
 #include "device.hpp"
 
-struct CommandBuffersCreateInfo
-{
-    size_t count;
-    QueueFamilyIndices queueFamilies;
-    VkCommandPoolCreateFlags poolCreateFlags;
-    VkCommandBufferUsageFlags usageFlags;
-    Pipeline pipeline;
-    std::vector<DescriptorSets> descriptorSets;
-    std::vector<VkImage> images;
-    VkExtent2D imageExtent;
-};
+VkCommandPool createCommandPool(
+    VkDevice device,
+    VkCommandPoolCreateFlags flags,
+    uint32_t queueFamily);
 
-struct CommandBuffers
-{
-    VkCommandPool pool;
-    std::vector<VkCommandBuffer> buffers;
-};
+void allocateCommandBuffers(
+    VkDevice device,
+    VkCommandPool commandPool,
+    size_t count,
+    VkCommandBuffer *commandBuffers);
 
-CommandBuffers createCommandBuffers(VkDevice device, CommandBuffersCreateInfo info);
+void recordRenderCommandBuffer(
+    VkCommandBuffer commandBuffer,
+    VkPipelineLayout pipelineLayout,
+    VkPipeline pipeline,
+    uint32_t descriptorSetCount,
+    VkDescriptorSet *descriptorSets,
+    VkImage image,
+    VkExtent2D imageExtent,
+    uint32_t computeFamilyIndex,
+    uint32_t presentFamilyIndex);
+
+void recordTransferCommandBuffer(
+    VkCommandBuffer commandBuffer,
+    VkBuffer src,
+    VkBuffer dst,
+    VkDeviceSize size);

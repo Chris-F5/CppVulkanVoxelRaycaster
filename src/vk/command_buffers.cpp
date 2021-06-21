@@ -2,13 +2,16 @@
 
 #include "exceptions.hpp"
 
-VkCommandPool createComputeCommandPool(VkDevice device, CommandBuffersCreateInfo *info)
+VkCommandPool createCommandPool(
+    VkDevice device,
+    VkCommandPoolCreateFlags flags,
+    uint32_t queueFamily)
 {
     VkCommandPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     poolInfo.pNext = nullptr;
-    poolInfo.flags = info->poolCreateFlags;
-    poolInfo.queueFamilyIndex = info->queueFamilies.computeFamily.value();
+    poolInfo.flags = flags;
+    poolInfo.queueFamilyIndex = queueFamily;
 
     VkCommandPool commandPool;
     handleVkResult(
@@ -18,43 +21,56 @@ VkCommandPool createComputeCommandPool(VkDevice device, CommandBuffersCreateInfo
     return commandPool;
 }
 
-std::vector<VkCommandBuffer> allocateCommandBuffers(
+void allocateCommandBuffers(
     VkDevice device,
     VkCommandPool commandPool,
-    CommandBuffersCreateInfo *info)
+    size_t count,
+    VkCommandBuffer *commandBuffers)
 {
-    std::vector<VkCommandBuffer> commandBuffers(info->count);
-
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.pNext = nullptr;
     allocInfo.commandPool = commandPool;
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandBufferCount = info->count;
+    allocInfo.commandBufferCount = count;
 
     handleVkResult(
-        vkAllocateCommandBuffers(device, &allocInfo, commandBuffers.data()),
+        vkAllocateCommandBuffers(device, &allocInfo, commandBuffers),
         "allocating command buffers");
-    return commandBuffers;
 }
 
-void recordCommandBuffer(
-    VkDevice device,
+void recordRenderCommandBuffer(
     VkCommandBuffer commandBuffer,
-    CommandBuffersCreateInfo *info,
-    size_t bufferIndex)
+    VkPipelineLayout pipelineLayout,
+    VkPipeline pipeline,
+    uint32_t descriptorSetCount,
+    VkDescriptorSet *descriptorSets,
+    VkImage image,
+    VkExtent2D imageExtent,
+    uint32_t computeFamilyIndex,
+    uint32_t presentFamilyIndex)
 {
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.pNext = nullptr;
-    beginInfo.flags = info->usageFlags;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
     beginInfo.pInheritanceInfo = nullptr;
 
-    std::vector<VkDescriptorSet> descriptorSetToBind(info->descriptorSets.size());
-    for (int i = 0; i < info->descriptorSets.size(); i++)
-    {
-        descriptorSetToBind[i] = info->descriptorSets[i].sets[bufferIndex];
-    }
+    handleVkResult(
+        vkBeginCommandBuffer(commandBuffer, &beginInfo),
+        "beginning command buffer recording");
+
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+
+    vkCmdBindDescriptorSets(
+        commandBuffer,
+        VK_PIPELINE_BIND_POINT_COMPUTE,
+        pipelineLayout,
+        0,
+        descriptorSetCount,
+        descriptorSets,
+        0,
+        nullptr);
 
     VkImageSubresourceRange imageRange{};
     imageRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -69,37 +85,10 @@ void recordCommandBuffer(
     preImageBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
     preImageBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     preImageBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-    preImageBarrier.srcQueueFamilyIndex = info->queueFamilies.presentFamily.value();
-    preImageBarrier.dstQueueFamilyIndex = info->queueFamilies.computeFamily.value();
-    preImageBarrier.image = info->images[bufferIndex];
+    preImageBarrier.srcQueueFamilyIndex = presentFamilyIndex;
+    preImageBarrier.dstQueueFamilyIndex = computeFamilyIndex;
+    preImageBarrier.image = image;
     preImageBarrier.subresourceRange = imageRange;
-
-    VkImageMemoryBarrier postImageBarrier{};
-    postImageBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    postImageBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-    postImageBarrier.dstAccessMask = 0;
-    postImageBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-    postImageBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-    postImageBarrier.srcQueueFamilyIndex = info->queueFamilies.computeFamily.value();
-    postImageBarrier.dstQueueFamilyIndex = info->queueFamilies.presentFamily.value();
-    postImageBarrier.image = info->images[bufferIndex];
-    postImageBarrier.subresourceRange = imageRange;
-
-    handleVkResult(
-        vkBeginCommandBuffer(commandBuffer, &beginInfo),
-        "beginning command buffer recording");
-
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, info->pipeline.pipeline);
-
-    vkCmdBindDescriptorSets(
-        commandBuffer,
-        VK_PIPELINE_BIND_POINT_COMPUTE,
-        info->pipeline.layout,
-        0,
-        descriptorSetToBind.size(),
-        descriptorSetToBind.data(),
-        0,
-        nullptr);
 
     vkCmdPipelineBarrier(
         commandBuffer,
@@ -108,8 +97,19 @@ void recordCommandBuffer(
         0, nullptr,
         0, nullptr,
         1, &preImageBarrier);
+    
+    vkCmdDispatch(commandBuffer, imageExtent.width, imageExtent.height, 1);
 
-    vkCmdDispatch(commandBuffer, info->imageExtent.width, info->imageExtent.height, 1);
+    VkImageMemoryBarrier postImageBarrier{};
+    postImageBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    postImageBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    postImageBarrier.dstAccessMask = 0;
+    postImageBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+    postImageBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    postImageBarrier.srcQueueFamilyIndex = computeFamilyIndex;
+    postImageBarrier.dstQueueFamilyIndex = presentFamilyIndex;
+    postImageBarrier.image = image;
+    postImageBarrier.subresourceRange = imageRange;
 
     vkCmdPipelineBarrier(
         commandBuffer,
@@ -121,21 +121,27 @@ void recordCommandBuffer(
 
     handleVkResult(
         vkEndCommandBuffer(commandBuffer),
-        "ending command buffer recording");
+        "ending commanbuffersd buffer recording");
 }
 
-CommandBuffers createCommandBuffers(VkDevice device, CommandBuffersCreateInfo info)
+void recordTransferCommandBuffer(
+    VkCommandBuffer commandBuffer,
+    VkBuffer src,
+    VkBuffer dst,
+    VkDeviceSize size)
 {
-    VkCommandPool pool = createComputeCommandPool(device, &info);
-    std::vector<VkCommandBuffer> vkCommandBuffers = allocateCommandBuffers(device, pool, &info);
-    for (int i = 0; i < info.count; i++)
-    {
-        recordCommandBuffer(device, vkCommandBuffers[i], &info, i);
-    }
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.pNext = nullptr;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    beginInfo.pInheritanceInfo = nullptr;
+    vkBeginCommandBuffer(commandBuffer, &beginInfo);
 
-    CommandBuffers commandBuffers{};
-    commandBuffers.pool = pool;
-    commandBuffers.buffers = vkCommandBuffers;
+    VkBufferCopy copyRegion{};
+    copyRegion.srcOffset = 0;
+    copyRegion.dstOffset = 0;
+    copyRegion.size = size;
+    vkCmdCopyBuffer(commandBuffer, src, dst, 1 , &copyRegion);
 
-    return commandBuffers;
+    vkEndCommandBuffer(commandBuffer);
 }

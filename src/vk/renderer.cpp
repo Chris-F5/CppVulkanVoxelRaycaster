@@ -5,6 +5,8 @@
 #include "command_buffers.hpp"
 #include "exceptions.hpp"
 
+const size_t OCTREE_BUFFER_SIZE = 1000000 * sizeof(uint);
+
 Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
 {
     Renderer renderer{};
@@ -46,12 +48,25 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
         renderer.camInfoBuffers,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
+    VkBufferCreateInfo octreeStagingBufferCreateInfo{};
+    octreeStagingBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    octreeStagingBufferCreateInfo.pNext = nullptr;
+    octreeStagingBufferCreateInfo.flags = 0;
+    octreeStagingBufferCreateInfo.size = OCTREE_BUFFER_SIZE;
+    octreeStagingBufferCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    renderer.octreeStagingBuffer = createBuffers(renderer.device, &octreeStagingBufferCreateInfo, 1)[0];
+    renderer.octreeStagingBufferMemory = allocateBuffers(
+        renderer.device,
+        renderer.physicalDevice,
+        std::vector<VkBuffer>{renderer.octreeStagingBuffer},
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)[0];
+
     VkBufferCreateInfo octreeBufferCreateInfo{};
     octreeBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     camInfoBufferCreateInfo.pNext = nullptr;
     camInfoBufferCreateInfo.flags = 0;
-    octreeBufferCreateInfo.size = sizeof(uint) * 1000000;
-    octreeBufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    octreeBufferCreateInfo.size = OCTREE_BUFFER_SIZE;
+    octreeBufferCreateInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     octreeBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
     renderer.octreeBuffer = createBuffers(renderer.device, &octreeBufferCreateInfo, 1)[0];
@@ -59,7 +74,7 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
         renderer.device,
         renderer.physicalDevice,
         std::vector<VkBuffer>{renderer.octreeBuffer},
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)[0];
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)[0];
 
     // DESCRIPTOR SETS
 
@@ -100,22 +115,41 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
 
     renderer.pipeline = createPipeline(renderer.device, pipelineCreateInfo);
 
+    vkDestroyShaderModule(renderer.device, renderShader, nullptr);
+
     // COMMAND BUFFERS
 
-    CommandBuffersCreateInfo commandBufferInfo{};
-    commandBufferInfo.count = renderer.swapchain.imageCount();
-    commandBufferInfo.queueFamilies = renderer.queueFamilyIndices;
-    commandBufferInfo.poolCreateFlags = 0;
-    commandBufferInfo.usageFlags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
-    commandBufferInfo.pipeline = renderer.pipeline;
-    commandBufferInfo.descriptorSets =
-        std::vector<DescriptorSets>{renderer.descriptorSets};
-    commandBufferInfo.images = renderer.swapchain.images;
-    commandBufferInfo.imageExtent = renderer.swapchain.extent;
+    renderer.computeCommandPool = createCommandPool(
+        renderer.device,
+        0,
+        renderer.queueFamilyIndices.computeFamily.value());
 
-    renderer.commandBuffers = createCommandBuffers(renderer.device, commandBufferInfo);
+    renderer.transientComputeCommandPool = createCommandPool(
+        renderer.device,
+        VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
+        renderer.queueFamilyIndices.computeFamily.value());
 
-    vkDestroyShaderModule(renderer.device, renderShader, nullptr);
+    renderer.renderCommandBuffers.resize(renderer.swapchain.imageCount());
+    allocateCommandBuffers(
+        renderer.device,
+        renderer.computeCommandPool,
+        renderer.swapchain.imageCount(),
+        renderer.renderCommandBuffers.data());
+
+    for(int i = 0 ; i < renderer.renderCommandBuffers.size(); i++){
+        VkDescriptorSet descriptorSetstToBndToRenderCommand[] = 
+            {renderer.descriptorSets.sets[i]};
+        recordRenderCommandBuffer(
+            renderer.renderCommandBuffers[i],
+            renderer.pipeline.layout,
+            renderer.pipeline.pipeline,
+            sizeof(descriptorSetstToBndToRenderCommand) / sizeof(descriptorSetstToBndToRenderCommand)[0],
+            descriptorSetstToBndToRenderCommand,
+            renderer.swapchain.images[i],
+            renderer.swapchain.extent,
+            renderer.queueFamilyIndices.computeFamily.value(),
+            renderer.queueFamilyIndices.presentFamily.value());
+    }
 
     // SYNCHRONIZATION OBJECTS
     for(int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++){
@@ -128,12 +162,43 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
     return renderer;
 }
 
-void updateOctree(Renderer *renderer, uint32_t* octree, size_t octreeSize){
+void octreeStagingTransfer(Renderer *renderer, size_t size){
+    VkCommandBuffer commandBuffer;
+    allocateCommandBuffers(
+        renderer->device,
+        renderer->transientComputeCommandPool,
+        1,
+        &commandBuffer);
+    recordTransferCommandBuffer(
+        commandBuffer,
+        renderer->octreeStagingBuffer,
+        renderer->octreeBuffer,
+        size * sizeof(uint32_t));
+
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.pNext = nullptr;
+    submitInfo.waitSemaphoreCount = 0;
+    submitInfo.pWaitDstStageMask = nullptr;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffer;
+    submitInfo.signalSemaphoreCount = 0;
+
+    vkQueueSubmit(renderer->computeQueue, 1, &submitInfo, VK_NULL_HANDLE);
+
+    vkQueueWaitIdle(renderer->computeQueue);
+
+    vkFreeCommandBuffers(renderer->device, renderer->transientComputeCommandPool, 1, &commandBuffer);
+}
+
+void updateOctree(Renderer *renderer, size_t octreeSize, uint32_t* octree){
     size_t memorySize = octreeSize * sizeof(uint);
     void *data;
-    vkMapMemory(renderer->device, renderer->octreeBufferMemory, 0, memorySize , 0, &data);
+    vkMapMemory(renderer->device, renderer->octreeStagingBufferMemory, 0, memorySize , 0, &data);
     memcpy(data, octree, memorySize);
-    vkUnmapMemory(renderer->device, renderer->octreeBufferMemory);
+    vkUnmapMemory(renderer->device, renderer->octreeStagingBufferMemory);
+
+    octreeStagingTransfer(renderer, octreeSize);
 }
 
 void drawFrame(Renderer *renderer, CamInfoBuffer *camInfo)
@@ -169,7 +234,7 @@ void drawFrame(Renderer *renderer, CamInfoBuffer *camInfo)
     submitInfo.pWaitSemaphores = &renderer->imageAvailableSemaphores[renderer->currentFrame];
     submitInfo.pWaitDstStageMask = waitStages;
     submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &renderer->commandBuffers.buffers[imageIndex];
+    submitInfo.pCommandBuffers = &renderer->renderCommandBuffers[imageIndex];
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = &renderer->renderFinishSemaphores[renderer->currentFrame];
 
@@ -195,19 +260,24 @@ void drawFrame(Renderer *renderer, CamInfoBuffer *camInfo)
 
 void cleanupRenderer(Renderer *renderer)
 {
+
     for(int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++){
         vkDestroySemaphore(renderer->device, renderer->imageAvailableSemaphores[i], nullptr);
         vkDestroySemaphore(renderer->device, renderer->renderFinishSemaphores[i], nullptr);
         vkDestroyFence(renderer->device, renderer->inFlightFences[i], nullptr);
     }
 
-    vkDestroyCommandPool(renderer->device, renderer->commandBuffers.pool, nullptr);
+    vkDestroyCommandPool(renderer->device, renderer->computeCommandPool, nullptr);
+    vkDestroyCommandPool(renderer->device, renderer->transientComputeCommandPool, nullptr);
 
     vkDestroyDescriptorPool(renderer->device, renderer->descriptorSets.pool, nullptr);
     vkDestroyDescriptorSetLayout(renderer->device, renderer->descriptorSets.layout, nullptr);
 
     vkDestroyBuffer(renderer->device, renderer->octreeBuffer, nullptr);
     vkFreeMemory(renderer->device, renderer->octreeBufferMemory, nullptr);
+
+    vkDestroyBuffer(renderer->device, renderer->octreeStagingBuffer, nullptr);
+    vkFreeMemory(renderer->device, renderer->octreeStagingBufferMemory, nullptr);
 
     for (int i = 0; i < renderer->swapchain.imageCount(); i++)
     {

@@ -173,9 +173,7 @@ std::vector<uint32_t> getOctreeFromFile(std::string filename)
         uint r = raw[i + 3];
         uint g = raw[i + 4];
         uint b = raw[i + 5];
-        //std::cout << "== " << x << " " << y << " " << z << "\n";
         insertIntoOctree(&octree, depth, x, y, z, r, g, b);
     }
-    std::cout << depth << "\n";
     return octree;
 }
