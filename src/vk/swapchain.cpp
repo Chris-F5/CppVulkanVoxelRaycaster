@@ -156,7 +156,11 @@ bool checkSwapchainSupport(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface
            !supportDetails.presentModes.empty();
 }
 
-Swapchain createSwapchain(VkDevice device, VkPhysicalDevice physicalDevice, GLFWwindow *window, VkSurfaceKHR surface, QueueFamilyIndices queueFamilyIndices)
+Swapchain createSwapchain(
+    VkDevice device,
+    VkPhysicalDevice physicalDevice,
+    GLFWwindow *window,
+    VkSurfaceKHR surface)
 {
     Swapchain swapchain;
 
@@ -178,31 +182,7 @@ Swapchain createSwapchain(VkDevice device, VkPhysicalDevice physicalDevice, GLFW
     // Number of layers each image consists of. 1 because we render to a 2d screen.
     createInfo.imageArrayLayers = 1;
     createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
-
-    uint32_t queueFamilies[] = {queueFamilyIndices.computeFamily.value(), queueFamilyIndices.presentFamily.value()};
-    uint32_t queueFamilyCount = sizeof(queueFamilies) / sizeof(queueFamilies[0]);
-
-    bool queueFamiliesAreSame = true;
-    for (int i = 0; i < queueFamilyCount; i++)
-    {
-        if (queueFamilies[0] != queueFamilies[i])
-        {
-            queueFamiliesAreSame = false;
-            break;
-        }
-    }
-
-    if (queueFamiliesAreSame)
-    {
-        createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    }
-    else
-    {
-        createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-        createInfo.queueFamilyIndexCount = queueFamilyCount;
-        createInfo.pQueueFamilyIndices = queueFamilies;
-    }
-
+    createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     createInfo.preTransform = supportDetails.surfaceCapabilities.currentTransform;
     createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     createInfo.presentMode = swapchain.presentMode;
@@ -219,7 +199,7 @@ Swapchain createSwapchain(VkDevice device, VkPhysicalDevice physicalDevice, GLFW
     return swapchain;
 }
 
-void cleanupSwpachain(VkDevice device, Swapchain swapchain)
+void cleanupSwapchain(VkDevice device, Swapchain swapchain)
 {
     for (auto imageView : swapchain.imageViews)
     {

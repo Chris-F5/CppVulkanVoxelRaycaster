@@ -126,10 +126,10 @@ bool isPhysicalDeviceSuitable(VkPhysicalDevice physicalDevice, VkSurfaceKHR surf
     vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
     vkGetPhysicalDeviceFeatures(physicalDevice, &deviceFeatures);
 
-    QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice, surface);
+    QueueFamilyInfo computeAndPresentFamily = pickComputeAndPresentFamily(physicalDevice, surface);
 
     return deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU &&
-           queueFamilyIndices.isComplete() &&
+           computeAndPresentFamily.found &&
            checkDeviceExtensionSupport(physicalDevice) &&
            checkSwapchainSupport(physicalDevice, surface);
 }
@@ -140,12 +140,11 @@ VkPhysicalDevice pickPhysicalDevice(VkInstance instance, VkSurfaceKHR surface)
     vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, nullptr);
     if (physicalDeviceCount == 0)
     {
-        throw std::runtime_error("Failed to find any GPUs with Vulcan support");
+        throw std::runtime_error("failed to find any GPUs with Vulkan support");
     }
 
     std::vector<VkPhysicalDevice> physicalDevices(physicalDeviceCount);
     vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, physicalDevices.data());
-
     for (const auto &physicalDevice : physicalDevices)
     {
         if (isPhysicalDeviceSuitable(physicalDevice, surface))
@@ -154,30 +153,27 @@ VkPhysicalDevice pickPhysicalDevice(VkInstance instance, VkSurfaceKHR surface)
         }
     }
 
-    throw std::runtime_error("Failed to find suitable GPU");
+    throw std::runtime_error("failed to find suitable GPU");
 }
 
-VkDevice createLogicalDevice(VkPhysicalDevice physicalDevice, bool enableValidationLayers, QueueFamilyIndices queueFamilyIndices)
+VkDevice createLogicalDevice(
+    VkPhysicalDevice physicalDevice,
+    bool enableValidationLayers,
+    uint32_t queueFamilyIndiciesCount,
+    uint32_t *queueFamilyIndices)
 {
-    if (!queueFamilyIndices.isComplete())
-    {
-        throw std::invalid_argument("Cant create logical device with incomplete queue family indices.");
-    }
-
-    std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
-    std::set<uint32_t> uniqueQueueFamilies = {
-        queueFamilyIndices.computeFamily.value(),
-        queueFamilyIndices.presentFamily.value()};
+    VkDeviceQueueCreateInfo *queueCreateInfos = 
+        (VkDeviceQueueCreateInfo*)malloc(queueFamilyIndiciesCount * sizeof(VkDeviceQueueCreateInfo));
 
     float queuePriority = 1.0f;
-    for (uint32_t queueFamily : uniqueQueueFamilies)
+    for (int i = 0; i < queueFamilyIndiciesCount; i++)
     {
         VkDeviceQueueCreateInfo queueCreateInfo{};
         queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-        queueCreateInfo.queueFamilyIndex = queueFamily;
+        queueCreateInfo.queueFamilyIndex = queueFamilyIndices[i];
         queueCreateInfo.queueCount = 1;
         queueCreateInfo.pQueuePriorities = &queuePriority;
-        queueCreateInfos.push_back(queueCreateInfo);
+        queueCreateInfos[i] = queueCreateInfo;
     }
 
     VkPhysicalDeviceFeatures deviceFeatures{};
@@ -186,8 +182,8 @@ VkDevice createLogicalDevice(VkPhysicalDevice physicalDevice, bool enableValidat
     VkDeviceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 
-    createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
-    createInfo.pQueueCreateInfos = queueCreateInfos.data();
+    createInfo.queueCreateInfoCount = queueFamilyIndiciesCount;
+    createInfo.pQueueCreateInfos = queueCreateInfos;
 
     createInfo.pEnabledFeatures = &deviceFeatures;
 
@@ -208,41 +204,54 @@ VkDevice createLogicalDevice(VkPhysicalDevice physicalDevice, bool enableValidat
     handleVkResult(
         vkCreateDevice(physicalDevice, &createInfo, nullptr, &device),
         "creating logical device");
+    
+    free(queueCreateInfos);
 
     return device;
 }
 
-QueueFamilyIndices findQueueFamilies(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface)
-{
-    QueueFamilyIndices indices;
+uint32_t scoreComputeAndPresentFamily(VkPhysicalDevice physicalDevice, uint32_t index, VkQueueFamilyProperties properties, VkSurfaceKHR surface){
+    if ((properties.queueFlags & VK_QUEUE_COMPUTE_BIT) == 0)
+        return 0;
 
-    uint32_t queueFamilyCount = 0;
+    VkBool32 presentSupport = false;
+    vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, index, surface, &presentSupport);
+    if (!presentSupport)
+        return 0;
+
+    uint32_t score = 1;
+    if((properties.queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0)
+        score += 3;
+    if((properties.queueFlags & VK_QUEUE_TRANSFER_BIT) == 0)
+        score += 1;
+    if((properties.queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) == 0)
+        score += 1;
+    return score;
+}
+
+QueueFamilyInfo pickComputeAndPresentFamily(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface){
+    uint32_t queueFamilyCount;
     vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, nullptr);
 
-    std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilies.data());
+    VkQueueFamilyProperties *queueFamilyProperties = 
+        (VkQueueFamilyProperties*) malloc(queueFamilyCount * sizeof(VkQueueFamilyProperties));
+    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilyProperties);
 
-    uint32_t i = 0;
-    for (const auto &queueFamily : queueFamilies)
-    {
-        if (queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT)
-        {
-            // TODO: Check if not graphics because that probably means compute part will be faster
-            indices.computeFamily = i;
-        }
-        VkBool32 presentSupport = false;
-        vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, surface, &presentSupport);
-        if (presentSupport)
-        {
-            indices.presentFamily = i;
-        }
+    uint32_t bestScore = 0;
+    uint32_t bestIndex = 0;
 
-        if (indices.isComplete())
-        {
-            break;
+    for(int i = 0; i < queueFamilyCount; i++){
+        uint score = scoreComputeAndPresentFamily(physicalDevice, i, queueFamilyProperties[i], surface);
+        if (score > bestScore){
+            bestScore = score;
+            bestIndex = i;
         }
-        i++;
     }
+    free(queueFamilyProperties);
 
-    return indices;
+    QueueFamilyInfo info{};
+    info.found = bestScore != 0;
+    info.index = bestIndex;
+    info.score = bestScore;
+    return info;
 }

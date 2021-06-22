@@ -17,19 +17,23 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
     renderer.instance = createInstance(enableValidationLayers);
     renderer.surface = createSurface(renderer.instance, window);
     renderer.physicalDevice = pickPhysicalDevice(renderer.instance, renderer.surface);
-    renderer.queueFamilyIndices = findQueueFamilies(renderer.physicalDevice, renderer.surface);
-    renderer.device = createLogicalDevice(renderer.physicalDevice, enableValidationLayers, renderer.queueFamilyIndices);
+    renderer.computeAndPresentQueueFamily = 
+        pickComputeAndPresentFamily(renderer.physicalDevice, renderer.surface).index;
+    renderer.device = createLogicalDevice(
+        renderer.physicalDevice,
+        enableValidationLayers,
+        1,
+        &renderer.computeAndPresentQueueFamily);
 
-    vkGetDeviceQueue(renderer.device, renderer.queueFamilyIndices.computeFamily.value(), 0, &renderer.computeQueue);
-    vkGetDeviceQueue(renderer.device, renderer.queueFamilyIndices.presentFamily.value(), 0, &renderer.presentQueue);
+    vkGetDeviceQueue(renderer.device, renderer.computeAndPresentQueueFamily, 0, &renderer.computeAndPresentQueue);
 
     // SWAPCHAIN
 
     renderer.swapchain = createSwapchain(
         renderer.device,
         renderer.physicalDevice,
-        window, renderer.surface,
-        renderer.queueFamilyIndices);
+        window,
+        renderer.surface);
 
     // BUFFERS
 
@@ -127,12 +131,12 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
     renderer.computeCommandPool = createCommandPool(
         renderer.device,
         0,
-        renderer.queueFamilyIndices.computeFamily.value());
+        renderer.computeAndPresentQueueFamily);
 
     renderer.transientComputeCommandPool = createCommandPool(
         renderer.device,
         VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
-        renderer.queueFamilyIndices.computeFamily.value());
+        renderer.computeAndPresentQueueFamily);
 
     renderer.renderCommandBuffers.resize(renderer.swapchain.imageCount());
     allocateCommandBuffers(
@@ -152,8 +156,8 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
             descriptorSetstToBndToRenderCommand,
             renderer.swapchain.images[i],
             renderer.swapchain.extent,
-            renderer.queueFamilyIndices.computeFamily.value(),
-            renderer.queueFamilyIndices.presentFamily.value());
+            renderer.computeAndPresentQueueFamily,
+            renderer.computeAndPresentQueueFamily);
     }
 
     // SYNCHRONIZATION OBJECTS
@@ -189,9 +193,9 @@ void octreeStagingTransfer(Renderer *renderer, size_t size){
     submitInfo.pCommandBuffers = &commandBuffer;
     submitInfo.signalSemaphoreCount = 0;
 
-    vkQueueSubmit(renderer->computeQueue, 1, &submitInfo, VK_NULL_HANDLE);
+    vkQueueSubmit(renderer->computeAndPresentQueue, 1, &submitInfo, VK_NULL_HANDLE);
 
-    vkQueueWaitIdle(renderer->computeQueue);
+    vkQueueWaitIdle(renderer->computeAndPresentQueue);
 
     vkFreeCommandBuffers(renderer->device, renderer->transientComputeCommandPool, 1, &commandBuffer);
 }
@@ -231,7 +235,7 @@ void drawFrame(Renderer *renderer, CamInfoBuffer *camInfo)
     memcpy(data, camInfo, sizeof(*camInfo));
     vkUnmapMemory(renderer->device, renderer->camInfoBuffersMemory[imageIndex]);
 
-    VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+    VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT};
 
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -244,7 +248,7 @@ void drawFrame(Renderer *renderer, CamInfoBuffer *camInfo)
     submitInfo.pSignalSemaphores = &renderer->renderFinishSemaphores[renderer->currentFrame];
 
     handleVkResult(
-        vkQueueSubmit(renderer->computeQueue, 1, &submitInfo, renderer->inFlightFences[renderer->currentFrame]),
+        vkQueueSubmit(renderer->computeAndPresentQueue, 1, &submitInfo, renderer->inFlightFences[renderer->currentFrame]),
         "submitting compute queue");
 
     VkPresentInfoKHR presentInfo{};
@@ -258,14 +262,13 @@ void drawFrame(Renderer *renderer, CamInfoBuffer *camInfo)
     presentInfo.waitSemaphoreCount = 1;
     presentInfo.pWaitSemaphores = &renderer->renderFinishSemaphores[renderer->currentFrame];
 
-    vkQueuePresentKHR(renderer->presentQueue, &presentInfo);
+    vkQueuePresentKHR(renderer->computeAndPresentQueue, &presentInfo);
 
     renderer->currentFrame = (renderer->currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
 void cleanupRenderer(Renderer *renderer)
 {
-
     for(int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++){
         vkDestroySemaphore(renderer->device, renderer->imageAvailableSemaphores[i], nullptr);
         vkDestroySemaphore(renderer->device, renderer->renderFinishSemaphores[i], nullptr);
@@ -293,12 +296,7 @@ void cleanupRenderer(Renderer *renderer)
     vkDestroyPipeline(renderer->device, renderer->pipeline.pipeline, nullptr);
     vkDestroyPipelineLayout(renderer->device, renderer->pipeline.layout, nullptr);
 
-    for (VkImageView imageView : renderer->swapchain.imageViews)
-    {
-        vkDestroyImageView(renderer->device, imageView, nullptr);
-    }
-
-    vkDestroySwapchainKHR(renderer->device, renderer->swapchain.swapchain, nullptr);
+    cleanupSwapchain(renderer->device, renderer->swapchain);
     vkDestroyDevice(renderer->device, nullptr);
     vkDestroySurfaceKHR(renderer->instance, renderer->surface, nullptr);
     vkDestroyInstance(renderer->instance, nullptr);

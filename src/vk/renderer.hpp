@@ -29,9 +29,8 @@ struct Renderer
     VkPhysicalDevice physicalDevice;
     VkDevice device;
     VkSurfaceKHR surface;
-    QueueFamilyIndices queueFamilyIndices;
-    VkQueue computeQueue;
-    VkQueue presentQueue;
+    uint32_t computeAndPresentQueueFamily;
+    VkQueue computeAndPresentQueue;
 
     Swapchain swapchain;
 

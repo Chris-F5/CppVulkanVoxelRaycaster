@@ -21,5 +21,9 @@ struct Swapchain
 };
 
 bool checkSwapchainSupport(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface);
-Swapchain createSwapchain(VkDevice device, VkPhysicalDevice physicalDevice, GLFWwindow *window, VkSurfaceKHR surface, QueueFamilyIndices queueFamilyIndices);
+Swapchain createSwapchain(
+    VkDevice device,
+    VkPhysicalDevice physicalDevice,
+    GLFWwindow *window,
+    VkSurfaceKHR surface);
 void cleanupSwapchain(VkDevice device, Swapchain swapchain);

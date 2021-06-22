@@ -5,19 +5,18 @@
 
 #include <optional>
 
-struct QueueFamilyIndices
-{
-    std::optional<uint32_t> computeFamily;
-    std::optional<uint32_t> presentFamily;
-
-    bool isComplete()
-    {
-        return computeFamily.has_value() && presentFamily.has_value();
-    }
+struct QueueFamilyInfo{
+    bool found;
+    uint32_t index;
+    uint32_t score;
 };
 
 VkInstance createInstance(const bool enableValidationLayers);
 VkSurfaceKHR createSurface(VkInstance instance, GLFWwindow *window);
 VkPhysicalDevice pickPhysicalDevice(VkInstance instance, VkSurfaceKHR surface);
-VkDevice createLogicalDevice(VkPhysicalDevice physicalDevice, bool enableValidationLayers, QueueFamilyIndices queueFamilyIndices);
-QueueFamilyIndices findQueueFamilies(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface);
+VkDevice createLogicalDevice(
+    VkPhysicalDevice physicalDevice,
+    bool enableValidationLayers,
+    uint32_t queueFamilyIndiciesCount,
+    uint32_t *queueFamilyIndices);
+QueueFamilyInfo pickComputeAndPresentFamily(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface);
