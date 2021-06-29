@@ -11,9 +11,15 @@ layout (binding = 1) uniform CamInfo{
     mat4 rot;
 } camInfo;
 
-layout (binding = 2) uniform texture3D scene;
+layout (binding = 2, r8ui) uniform uimage3D scene;
+
+const vec4 BACKGROUND_COLOR = vec4(0.1, 0.1, 0.2, 1.0);
+const int SCENE_WIDTH = 3;
+const int SCENE_HEIGHT = 3;
+const int SCENE_DEPTH = 3;
 
 void main(){
+	// RAY GENERATION
 	const float aspectRatio = float(gl_NumWorkGroups.x) / float(gl_NumWorkGroups.y);
 	const vec2 screenSpaceLocation = vec2(
 		(float(gl_WorkGroupID.x) / float(gl_NumWorkGroups.x) * 2 - 1) * aspectRatio,
@@ -22,5 +28,74 @@ void main(){
 	const vec3 dir = vec3(camInfo.rot * normalize(vec4(screenSpaceLocation, 1, 1)));
     vec3 pos = vec3(camInfo.pos);
 
-	imageStore( image, ivec2(gl_WorkGroupID.xy), vec4(texelFetch(scene, ivec3(0,0,0), 0).r, 0.0, 0.0, 1.0) );
+	// ENTER VOXEL GRID
+	{
+		float tx0 = (-pos.x) / dir.x;
+		float ty0 = (-pos.y) / dir.y;
+		float tz0 = (-pos.z) / dir.z;
+		float tx1 = (SCENE_WIDTH - pos.x) / dir.x;
+		float ty1 = (SCENE_HEIGHT - pos.y) / dir.y;
+		float tz1 = (SCENE_DEPTH - pos.z) / dir.z;
+		float tmin = max(max(min(tx0, tx1), min(ty0, ty1)), min(tz0, tz1));
+		float tmax = min(min(max(tx0, tx1), max(ty0, ty1)), max(tz0, tz1));
+		if(tmin < tmax){
+			if (tmin > 0){
+				pos = dir * tmin + pos;
+			}
+		}else{
+			imageStore( image, ivec2(gl_WorkGroupID.xy), BACKGROUND_COLOR );
+			return;
+		}
+	}
+	// TRAVERSE GRID (https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview/FastVoxelTraversalOverview.md)
+
+	ivec3 gridPos = ivec3(floor(pos));
+	gridPos = clamp(gridPos, ivec3(0), ivec3(SCENE_WIDTH - 1, SCENE_HEIGHT - 1, SCENE_DEPTH - 1));
+	ivec3 gridStep = ivec3(sign(dir));
+	vec3 tDelta = abs(1 / dir);
+	vec3 tMax = vec3(
+		dir.x < 0 ? (pos.x - gridPos.x) * tDelta.x : (gridPos.x + 1 - pos.x) * tDelta.x,
+		dir.y < 0 ? (pos.y - gridPos.y) * tDelta.y : (gridPos.y + 1 - pos.y) * tDelta.y,
+		dir.z < 0 ? (pos.z - gridPos.z) * tDelta.z : (gridPos.z + 1 - pos.z) * tDelta.z
+	);
+	ivec3 exit = ivec3(
+		dir.x < 0 ? -1 : SCENE_WIDTH,
+		dir.y < 0 ? -1 : SCENE_HEIGHT,
+		dir.z < 0 ? -1 : SCENE_DEPTH
+	);
+
+	uint hitVoxel = 0;
+	while((hitVoxel = imageLoad(scene, gridPos).r) == 0){
+		if(tMax.x < tMax.y){
+			if(tMax.x < tMax. z){
+				gridPos.x += gridStep.x;
+				if(gridPos.x == exit.x)
+					break;
+				tMax.x += tDelta.x;
+			}else{
+				gridPos.z += gridStep.z;
+				if(gridPos.z == exit.z)
+					break;
+				tMax.z += tDelta.z;
+			}
+		}else{
+			if(tMax.y < tMax.z){
+				gridPos.y += gridStep.y;
+				if(gridPos.y == exit.y)
+					break;
+				tMax.y += tDelta.y;
+			}else{
+				gridPos.z += gridStep.z;
+				if(gridPos.z == exit.z)
+					break;
+				tMax.z += tDelta.z;
+			}
+		}
+	}
+
+	if(hitVoxel == 0){
+		imageStore( image, ivec2(gl_WorkGroupID.xy), BACKGROUND_COLOR);
+	}else{
+		imageStore( image, ivec2(gl_WorkGroupID.xy), vec4(imageLoad(scene, gridPos).r / 255.0, 0.0, 0.0, 1.0) );
+	}
 }

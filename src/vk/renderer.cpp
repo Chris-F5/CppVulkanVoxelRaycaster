@@ -201,9 +201,9 @@ void transitionImageLayout(
 
 void updateScene(Renderer *renderer){
     unsigned char voxels[] = {
-        255, 1, 2, 3, 4, 5, 6, 7, 8,
-        0, 1, 2, 3, 4, 5, 6, 7, 8,
-        0, 1, 2, 3, 4, 5, 6, 7, 8
+        255, 100, 80, 0, 150, 0, 255, 0, 100,
+        120, 240, 0, 240, 100, 150, 0, 0, 255,
+        255, 100, 80, 0, 120, 240, 0, 240, 100
     };
     void *data;
     vkMapMemory(renderer->device, renderer->sceneStagingBufferMemory, 0, sizeof(voxels) , 0, &data);
@@ -215,7 +215,7 @@ void updateScene(Renderer *renderer){
         renderer->computeAndPresentQueue,
         renderer->transientComputeCommandPool,
         renderer->sceneImage,
-        VK_FORMAT_R8_SRGB,
+        VK_FORMAT_R8_UINT,
         VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         0,
@@ -238,9 +238,9 @@ void updateScene(Renderer *renderer){
         renderer->computeAndPresentQueue,
         renderer->transientComputeCommandPool,
         renderer->sceneImage,
-        VK_FORMAT_R8_SRGB,
+        VK_FORMAT_R8_UINT,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_IMAGE_LAYOUT_GENERAL,
         VK_ACCESS_TRANSFER_WRITE_BIT,
         VK_PIPELINE_STAGE_TRANSFER_BIT,
         VK_ACCESS_SHADER_READ_BIT,
@@ -334,13 +334,13 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
         renderer.device,
         0,
         VK_IMAGE_TYPE_3D,
-        VK_FORMAT_R8_SRGB,
+        VK_FORMAT_R8_UINT,
         sceneExtent,
         1,
         1,
         VK_SAMPLE_COUNT_1_BIT,
         VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
         VK_IMAGE_LAYOUT_UNDEFINED
     );
 
@@ -356,7 +356,7 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
     renderer.sceneImageView = createImageView(
         renderer.device,
         renderer.sceneImage,
-        VK_FORMAT_R8_SRGB,
+        VK_FORMAT_R8_UINT,
         VK_IMAGE_VIEW_TYPE_3D
     );
 
@@ -377,10 +377,10 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
 
     DescriptorCreateInfo sceneDescriptor{};
     sceneDescriptor.binding = 2;
-    sceneDescriptor.type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    sceneDescriptor.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     sceneDescriptor.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
     sceneDescriptor.imageViews = std::vector<VkImageView>(renderer.swapchain.imageCount(), renderer.sceneImageView);
-    sceneDescriptor.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    sceneDescriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
     std::vector<DescriptorCreateInfo>
         descriptorInfos{swapchainImageDescriptor, camInfoDescroptor, sceneDescriptor};
