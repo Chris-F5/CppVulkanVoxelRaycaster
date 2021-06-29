@@ -19,19 +19,17 @@ void allocateCommandBuffers(
     size_t count,
     VkCommandBuffer *commandBuffers);
 
-void recordRenderCommandBuffer(
+void beginRecordingCommandBuffer(
     VkCommandBuffer commandBuffer,
-    VkPipelineLayout pipelineLayout,
-    VkPipeline pipeline,
-    uint32_t descriptorSetCount,
-    VkDescriptorSet *descriptorSets,
-    VkImage image,
-    VkExtent2D imageExtent,
-    uint32_t computeFamilyIndex,
-    uint32_t presentFamilyIndex);
+    VkCommandBufferUsageFlags flags);
 
-void recordTransferCommandBuffer(
-    VkCommandBuffer commandBuffer,
-    VkBuffer src,
-    VkBuffer dst,
-    VkDeviceSize size);
+void submitCommandBuffers(
+    VkQueue queue,
+    uint32_t commandBufferCount,
+    VkCommandBuffer *commandBuffers,
+    uint32_t waitSemaphoreCount,
+    VkSemaphore *waitSemaphores,
+    VkPipelineStageFlags *waitDstStageMasks,
+    uint32_t signalSemaphoreCount,
+    VkSemaphore *signalSemaphores,
+    VkFence fence);

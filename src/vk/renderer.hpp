@@ -39,11 +39,12 @@ struct Renderer
     std::vector<VkBuffer> camInfoBuffers;
     std::vector<VkDeviceMemory> camInfoBuffersMemory;
 
-    VkBuffer octreeStagingBuffer;
-    VkDeviceMemory octreeStagingBufferMemory;
+    VkBuffer sceneStagingBuffer;
+    VkDeviceMemory sceneStagingBufferMemory;
 
-    VkBuffer octreeBuffer;
-    VkDeviceMemory octreeBufferMemory;
+    VkImage sceneImage;
+    VkImageView sceneImageView;
+    VkDeviceMemory sceneImageMemory;
 
     Pipeline pipeline;
 
@@ -61,6 +62,6 @@ struct Renderer
 };
 
 Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers);
-void updateOctree(Renderer *renderer, size_t octreeSize, uint32_t* octree);
+void updateScene(Renderer *renderer);
 void drawFrame(Renderer *rendrer, CamInfoBuffer *camInfo);
 void cleanupRenderer(Renderer *renderPipeline);

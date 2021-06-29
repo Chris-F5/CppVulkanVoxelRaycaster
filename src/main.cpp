@@ -69,13 +69,10 @@ void mainLoop(GLFWwindow *window, Renderer *renderer)
 
 int main()
 {
-    std::vector<uint> octree = getOctreeFromFile("scene.ply");
-
     glfwInit();
     GLFWwindow *window = createWindow("Ray Caster", WIDTH, HEIGHT);
 
     Renderer renderer = createRenderer(window, enableValidationLayers);
-    updateOctree(&renderer, octree.size(), octree.data());
 
     enableStickyKeys(window);
     mainLoop(window, &renderer);
@@ -85,6 +82,6 @@ int main()
     cleanupRenderer(&renderer);
     glfwDestroyWindow(window);
     glfwTerminate();
-
+    
     return EXIT_SUCCESS;
 }

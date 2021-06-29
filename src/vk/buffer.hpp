@@ -2,18 +2,39 @@
 
 #include <vulkan/vulkan.h>
 
-void createBuffers(
+VkBuffer createBuffer(
     VkDevice device,
     VkBufferCreateFlags flags,
     VkDeviceSize size,
-    VkBufferUsageFlags usageFlags,
-    size_t count,
-    VkBuffer *buffers);
+    VkBufferUsageFlags usageFlags);
 
-void allocateBuffers(
+VkImage createImage(
+    VkDevice device,
+    VkImageViewCreateFlags flags,
+    VkImageType imageType,
+    VkFormat format,
+    VkExtent3D extent,
+    uint32_t mipLevels,
+    uint32_t arrayLayers,
+    VkSampleCountFlagBits samples,
+    VkImageTiling tiling,
+    VkImageUsageFlags usage,
+    VkImageLayout initialLayout);
+
+VkDeviceMemory allocateBuffer(
     VkDevice device,
     VkPhysicalDevice physicalDevice,
-    uint32_t count,
-    VkBuffer *buffers,
-    VkMemoryPropertyFlags memoryPropertyFlags,
-    VkDeviceMemory *buffersMemory);
+    VkBuffer buffer,
+    VkMemoryPropertyFlags memoryPropertyFlags);
+
+VkDeviceMemory allocateImage(
+    VkDevice device,
+    VkPhysicalDevice physicalDevice,
+    VkImage image,
+    VkMemoryPropertyFlags memoryPropertyFlags);
+
+VkImageView createImageView(
+    VkDevice device,
+    VkImage image,
+    VkFormat format,
+    VkImageViewType viewType);
