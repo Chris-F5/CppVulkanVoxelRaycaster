@@ -20,3 +20,4 @@ VkDevice createLogicalDevice(
     uint32_t queueFamilyIndiciesCount,
     uint32_t *queueFamilyIndices);
 QueueFamilyInfo pickComputeAndPresentFamily(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface);
+uint32_t findMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties);

@@ -8,12 +8,12 @@
 
 #include <string>
 
-#include "swapchain.hpp"
-#include "device.hpp"
-#include "descriptor_set.hpp"
-#include "pipeline.hpp"
-#include "synchronization.hpp"
-#include "command_buffers.hpp"
+#include "vk/swapchain.hpp"
+#include "vk/device.hpp"
+#include "vk/descriptor_set.hpp"
+#include "vk/pipeline.hpp"
+#include "vk/synchronization.hpp"
+#include "vk/command_buffers.hpp"
 
 const size_t MAX_FRAMES_IN_FLIGHT = 3;
 

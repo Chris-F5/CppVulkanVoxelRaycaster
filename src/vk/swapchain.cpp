@@ -3,6 +3,7 @@
 #include <iostream>
 
 #include "exceptions.hpp"
+#include "image.hpp"
 
 struct SwapchainSupportDetails
 {
@@ -119,36 +120,6 @@ std::vector<VkImage> getSwapchainImages(VkDevice device, VkSwapchainKHR swapchai
     return images;
 }
 
-std::vector<VkImageView> createImageViews(VkDevice device, std::vector<VkImage> swapchainImages, VkFormat imageFormat)
-{
-    std::vector<VkImageView> imageViews(swapchainImages.size());
-    for (size_t i = 0; i < swapchainImages.size(); i++)
-    {
-        VkImageViewCreateInfo createInfo{};
-        createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        createInfo.image = swapchainImages[i];
-        createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        createInfo.format = imageFormat;
-
-        createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-        createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-        createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-        createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-
-        createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        createInfo.subresourceRange.baseMipLevel = 0;
-        createInfo.subresourceRange.levelCount = 1;
-        createInfo.subresourceRange.baseArrayLayer = 0;
-        createInfo.subresourceRange.layerCount = 1;
-
-        handleVkResult(
-            vkCreateImageView(device, &createInfo, nullptr, &imageViews[i]),
-            "creating image view");
-    }
-
-    return imageViews;
-}
-
 bool checkSwapchainSupport(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface)
 {
     SwapchainSupportDetails supportDetails = querySupportDetails(physicalDevice, surface);
@@ -195,7 +166,13 @@ Swapchain createSwapchain(
         "creating swapchain");
 
     swapchain.images = getSwapchainImages(device, swapchain.swapchain);
-    swapchain.imageViews = createImageViews(device, swapchain.images, swapchain.surfaceFormat.format);
+    swapchain.imageViews = std::vector<VkImageView>(swapchain.imageCount());
+    for(int i = 0 ; i < swapchain.imageCount(); i++)
+        swapchain.imageViews[i] = createImageView(
+            device,
+            swapchain.images[i],
+            swapchain.surfaceFormat.format,
+            VK_IMAGE_VIEW_TYPE_2D);
     return swapchain;
 }
 

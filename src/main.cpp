@@ -8,7 +8,7 @@
 #include <iostream>
 
 #include "window.hpp"
-#include "vk/renderer.hpp"
+#include "renderer.hpp"
 #include "input.hpp"
 #include "camera_controller.hpp"
 #include "model_loader.hpp"

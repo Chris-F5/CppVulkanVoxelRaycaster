@@ -1,9 +1,10 @@
 #include "renderer.hpp"
 
-#include "buffer.hpp"
-#include "shader_module.hpp"
-#include "command_buffers.hpp"
-#include "exceptions.hpp"
+#include "vk/buffer.hpp"
+#include "vk/image.hpp"
+#include "vk/shader_module.hpp"
+#include "vk/command_buffers.hpp"
+#include "vk/exceptions.hpp"
 
 const uint SCENE_WIDTH = 97;
 const uint SCENE_HEIGHT = 79;
@@ -315,52 +316,45 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
         window,
         renderer.surface);
 
-    // BUFFERS
+    // IMAGE STAGING BUFFERS
 
-    renderer.sceneStagingBuffer = createBuffer(
+    createBuffer(
         renderer.device,
-        0,
+        renderer.physicalDevice,
         SCENE_WIDTH * SCENE_HEIGHT * SCENE_DEPTH * sizeof(unsigned char),
-        VK_BUFFER_USAGE_TRANSFER_SRC_BIT
-    );
-
-    renderer.sceneStagingBufferMemory = allocateBuffer(
-        renderer.device,
-        renderer.physicalDevice,
-        renderer.sceneStagingBuffer,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-    );
-
-    renderer.paletteStagingBuffer = createBuffer(
-        renderer.device,
         0,
-        256 * 4 * sizeof(unsigned char),
-        VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        &renderer.sceneStagingBuffer,
+        &renderer.sceneStagingBufferMemory
     );
 
-    renderer.paletteStagingBufferMemory = allocateBuffer(
+    createBuffer(
         renderer.device,
         renderer.physicalDevice,
-        renderer.paletteStagingBuffer,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+        256 * 4 * sizeof(unsigned char),
+        0,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        &renderer.paletteStagingBuffer,
+        &renderer.paletteStagingBufferMemory
     );
+
+    // CAM INFO BUFFERS
 
     renderer.camInfoBuffers.resize(renderer.swapchain.imageCount());
     renderer.camInfoBuffersMemory.resize(renderer.swapchain.imageCount());
-    for (int i = 0 ; i < renderer.swapchain.imageCount(); i++){
-        renderer.camInfoBuffers[i] = createBuffer(
-            renderer.device,
-            0,
-            sizeof(CamInfoBuffer),
-            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
-        );
-        renderer.camInfoBuffersMemory[i] = allocateBuffer(
+    for (int i = 0 ; i < renderer.swapchain.imageCount(); i++)
+        createBuffer(
             renderer.device,
             renderer.physicalDevice,
-            renderer.camInfoBuffers[i],
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+            sizeof(CamInfoBuffer),
+            0,
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            &renderer.camInfoBuffers[i],
+            &renderer.camInfoBuffersMemory[i]
         );
-    }
 
     // COMMAND POOLS
 
@@ -375,32 +369,24 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
         renderer.computeAndPresentQueueFamily);
 
 
-    // VOXEL IMAGES
+    // SCENE IMAGE
 
-    VkExtent3D sceneExtent{};
-    sceneExtent.width = SCENE_WIDTH;
-    sceneExtent.height = SCENE_HEIGHT;
-    sceneExtent.depth = SCENE_DEPTH;
-
-    renderer.sceneImage = createImage(
+    createImage(
         renderer.device,
-        0,
+        renderer.physicalDevice,
         VK_IMAGE_TYPE_3D,
         VK_FORMAT_R8_UINT,
-        sceneExtent,
+        VkExtent3D{SCENE_WIDTH, SCENE_HEIGHT, SCENE_DEPTH},
+        0,
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
         1,
         1,
         VK_SAMPLE_COUNT_1_BIT,
         VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
-        VK_IMAGE_LAYOUT_UNDEFINED
-    );
-
-    renderer.sceneImageMemory = allocateImage(
-        renderer.device,
-        renderer.physicalDevice,
-        renderer.sceneImage,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+        false,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        &renderer.sceneImage,
+        &renderer.sceneImageMemory
     );
 
     renderer.sceneImageView = createImageView(
@@ -410,30 +396,24 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
         VK_IMAGE_VIEW_TYPE_3D
     );
 
-    VkExtent3D paletteExtent{};
-    paletteExtent.width = 256;
-    paletteExtent.height = 1;
-    paletteExtent.depth = 1;
+    // PALETTE IMAGE
 
-    renderer.paletteImage = createImage(
+    createImage(
         renderer.device,
-        0,
+        renderer.physicalDevice,
         VK_IMAGE_TYPE_1D,
         VK_FORMAT_R8G8B8A8_UNORM,
-        paletteExtent,
+        VkExtent3D{256, 1, 1},
+        0,
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
         1,
         1,
         VK_SAMPLE_COUNT_1_BIT,
         VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
-        VK_IMAGE_LAYOUT_UNDEFINED
-    );
-
-    renderer.paletteImageMemory = allocateImage(
-        renderer.device,
-        renderer.physicalDevice,
-        renderer.paletteImage,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+        false,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        &renderer.paletteImage,
+        &renderer.paletteImageMemory
     );
 
     renderer.paletteImageView = createImageView(
