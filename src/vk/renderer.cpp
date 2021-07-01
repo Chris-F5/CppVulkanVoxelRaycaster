@@ -5,9 +5,9 @@
 #include "command_buffers.hpp"
 #include "exceptions.hpp"
 
-const uint SCENE_WIDTH = 3;
-const uint SCENE_HEIGHT = 3;
-const uint SCENE_DEPTH = 3;
+const uint SCENE_WIDTH = 97;
+const uint SCENE_HEIGHT = 79;
+const uint SCENE_DEPTH = 97;
 
 void createRenderCommandBuffers(
     VkDevice device,
@@ -199,15 +199,11 @@ void transitionImageLayout(
     vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
 }
 
-void updateScene(Renderer *renderer){
-    unsigned char voxels[] = {
-        255, 100, 80, 0, 150, 0, 255, 0, 100,
-        120, 240, 0, 240, 100, 150, 0, 0, 255,
-        255, 100, 80, 0, 120, 240, 0, 240, 100
-    };
-    void *data;
-    vkMapMemory(renderer->device, renderer->sceneStagingBufferMemory, 0, sizeof(voxels) , 0, &data);
-    memcpy(data, voxels, sizeof(voxels));
+void updateScene(Renderer *renderer, unsigned char *palette, unsigned char *voxels){
+    size_t voxelsSize = SCENE_WIDTH * SCENE_HEIGHT * SCENE_DEPTH;
+    void *voxelImageData;
+    vkMapMemory(renderer->device, renderer->sceneStagingBufferMemory, 0, voxelsSize, 0, &voxelImageData);
+    memcpy(voxelImageData, voxels, voxelsSize);
     vkUnmapMemory(renderer->device, renderer->sceneStagingBufferMemory);
 
     transitionImageLayout(
@@ -239,6 +235,48 @@ void updateScene(Renderer *renderer){
         renderer->transientComputeCommandPool,
         renderer->sceneImage,
         VK_FORMAT_R8_UINT,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_IMAGE_LAYOUT_GENERAL,
+        VK_ACCESS_TRANSFER_WRITE_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_ACCESS_SHADER_READ_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
+    );
+
+    void *paletteData;
+    vkMapMemory(renderer->device, renderer->paletteStagingBufferMemory, 0, 256 * 4, 0, &paletteData);
+    memcpy(paletteData, palette, 256 * 4);
+    vkUnmapMemory(renderer->device, renderer->paletteStagingBufferMemory);
+
+    transitionImageLayout(
+        renderer->device,
+        renderer->computeAndPresentQueue,
+        renderer->transientComputeCommandPool,
+        renderer->paletteImage,
+        VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        0,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_ACCESS_TRANSFER_WRITE_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT
+    );
+
+    copyBufferToImage(
+        renderer->device,
+        renderer->computeAndPresentQueue,
+        renderer->transientComputeCommandPool,
+        VkExtent3D{256, 1, 1},
+        renderer->paletteStagingBuffer,
+        renderer->paletteImage
+    );
+
+    transitionImageLayout(
+        renderer->device,
+        renderer->computeAndPresentQueue,
+        renderer->transientComputeCommandPool,
+        renderer->paletteImage,
+        VK_FORMAT_R8G8B8A8_UNORM,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         VK_IMAGE_LAYOUT_GENERAL,
         VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -290,6 +328,20 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
         renderer.device,
         renderer.physicalDevice,
         renderer.sceneStagingBuffer,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+    );
+
+    renderer.paletteStagingBuffer = createBuffer(
+        renderer.device,
+        0,
+        256 * 4 * sizeof(unsigned char),
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+    );
+
+    renderer.paletteStagingBufferMemory = allocateBuffer(
+        renderer.device,
+        renderer.physicalDevice,
+        renderer.paletteStagingBuffer,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
     );
 
@@ -351,13 +403,44 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
 
-    updateScene(&renderer);
-
     renderer.sceneImageView = createImageView(
         renderer.device,
         renderer.sceneImage,
         VK_FORMAT_R8_UINT,
         VK_IMAGE_VIEW_TYPE_3D
+    );
+
+    VkExtent3D paletteExtent{};
+    paletteExtent.width = 256;
+    paletteExtent.height = 1;
+    paletteExtent.depth = 1;
+
+    renderer.paletteImage = createImage(
+        renderer.device,
+        0,
+        VK_IMAGE_TYPE_1D,
+        VK_FORMAT_R8G8B8A8_UNORM,
+        paletteExtent,
+        1,
+        1,
+        VK_SAMPLE_COUNT_1_BIT,
+        VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+        VK_IMAGE_LAYOUT_UNDEFINED
+    );
+
+    renderer.paletteImageMemory = allocateImage(
+        renderer.device,
+        renderer.physicalDevice,
+        renderer.paletteImage,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+    );
+
+    renderer.paletteImageView = createImageView(
+        renderer.device,
+        renderer.paletteImage,
+        VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_VIEW_TYPE_1D
     );
 
     // DESCRIPTOR SETS
@@ -382,8 +465,15 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
     sceneDescriptor.imageViews = std::vector<VkImageView>(renderer.swapchain.imageCount(), renderer.sceneImageView);
     sceneDescriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
+    DescriptorCreateInfo paletteDescriptor{};
+    paletteDescriptor.binding = 3;
+    paletteDescriptor.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    paletteDescriptor.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    paletteDescriptor.imageViews = std::vector<VkImageView>(renderer.swapchain.imageCount(), renderer.paletteImageView);
+    paletteDescriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
     std::vector<DescriptorCreateInfo>
-        descriptorInfos{swapchainImageDescriptor, camInfoDescroptor, sceneDescriptor};
+        descriptorInfos{swapchainImageDescriptor, camInfoDescroptor, sceneDescriptor, paletteDescriptor};
 
     renderer.descriptorSets = createDescriptorSets(renderer.device, descriptorInfos, renderer.swapchain.imageCount());
 
@@ -495,12 +585,19 @@ void cleanupRenderer(Renderer *renderer)
     vkDestroyDescriptorPool(renderer->device, renderer->descriptorSets.pool, nullptr);
     vkDestroyDescriptorSetLayout(renderer->device, renderer->descriptorSets.layout, nullptr);
 
+    vkDestroyBuffer(renderer->device, renderer->sceneStagingBuffer, nullptr);
+    vkFreeMemory(renderer->device, renderer->sceneStagingBufferMemory, nullptr);
+
     vkDestroyImageView(renderer->device, renderer->sceneImageView, nullptr);
     vkDestroyImage(renderer->device, renderer->sceneImage, nullptr);
     vkFreeMemory(renderer->device, renderer->sceneImageMemory, nullptr);
 
-    vkDestroyBuffer(renderer->device, renderer->sceneStagingBuffer, nullptr);
-    vkFreeMemory(renderer->device, renderer->sceneStagingBufferMemory, nullptr);
+    vkDestroyBuffer(renderer->device, renderer->paletteStagingBuffer, nullptr);
+    vkFreeMemory(renderer->device, renderer->paletteStagingBufferMemory, nullptr);
+
+    vkDestroyImageView(renderer->device, renderer->paletteImageView, nullptr);
+    vkDestroyImage(renderer->device, renderer->paletteImage, nullptr);
+    vkFreeMemory(renderer->device, renderer->paletteImageMemory, nullptr);
 
     for (int i = 0; i < renderer->swapchain.imageCount(); i++)
     {

@@ -11,7 +11,7 @@
 #include "vk/renderer.hpp"
 #include "input.hpp"
 #include "camera_controller.hpp"
-#include "octree_generator.hpp"
+#include "model_loader.hpp"
 
 #ifdef NDEBUG
 const bool enableValidationLayers = false;
@@ -69,10 +69,23 @@ void mainLoop(GLFWwindow *window, Renderer *renderer)
 
 int main()
 {
+    char voxModelFileName[] = "scene.ply";
+    unsigned int paletteSize;
+    unsigned char *palette;
+    unsigned int modelWidth, modelHeight, modelDepth;
+    unsigned char *model;
+    loadPlyVoxModel(
+        voxModelFileName,
+        &paletteSize, &palette,
+        &modelWidth, &modelHeight, &modelDepth, &model);
+
     glfwInit();
     GLFWwindow *window = createWindow("Ray Caster", WIDTH, HEIGHT);
 
     Renderer renderer = createRenderer(window, enableValidationLayers);
+    updateScene(&renderer, palette, model);
+    free(model);
+    free(palette);
 
     enableStickyKeys(window);
     mainLoop(window, &renderer);

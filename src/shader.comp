@@ -11,12 +11,13 @@ layout (binding = 1) uniform CamInfo{
     mat4 rot;
 } camInfo;
 
-layout (binding = 2, r8ui) uniform uimage3D scene;
+layout (binding = 2, r8ui) uniform readonly uimage3D scene;
+layout (binding = 3, rgba8) uniform readonly image1D palette;
 
 const vec4 BACKGROUND_COLOR = vec4(0.1, 0.1, 0.2, 1.0);
-const int SCENE_WIDTH = 3;
-const int SCENE_HEIGHT = 3;
-const int SCENE_DEPTH = 3;
+const int SCENE_WIDTH = 97;
+const int SCENE_HEIGHT = 79;
+const int SCENE_DEPTH = 97;
 
 void main(){
 	// RAY GENERATION
@@ -38,7 +39,7 @@ void main(){
 		float tz1 = (SCENE_DEPTH - pos.z) / dir.z;
 		float tmin = max(max(min(tx0, tx1), min(ty0, ty1)), min(tz0, tz1));
 		float tmax = min(min(max(tx0, tx1), max(ty0, ty1)), max(tz0, tz1));
-		if(tmin < tmax){
+		if(tmin < tmax && tmax > 0){
 			if (tmin > 0){
 				pos = dir * tmin + pos;
 			}
@@ -94,8 +95,8 @@ void main(){
 	}
 
 	if(hitVoxel == 0){
-		imageStore( image, ivec2(gl_WorkGroupID.xy), BACKGROUND_COLOR);
+		imageStore( image, ivec2(gl_WorkGroupID.xy), vec4(0.1, 0.1, 0.1, 1.0));
 	}else{
-		imageStore( image, ivec2(gl_WorkGroupID.xy), vec4(imageLoad(scene, gridPos).r / 255.0, 0.0, 0.0, 1.0) );
+		imageStore( image, ivec2(gl_WorkGroupID.xy), imageLoad(palette, int(hitVoxel) - 1) );
 	}
 }

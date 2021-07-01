@@ -1,13 +1,13 @@
 OUTPUTNAME = RayCaster
 CC = gcc
-CFLAGS = -std=c++17 -O2
+CFLAGS = -std=c++17 -O2 -g
 LDFLAGS = -lstdc++ -lglfw -lvulkan -ldl -lpthread -lX11 -lXxf86vm -lXrandr -lXi -lm
 SRCS = $(shell find ./src -type f -name "*.cpp")
 OBJS = $(patsubst ./src/%.cpp, obj/%.o, $(SRCS))
 
 .PHONY: run clean all
 
-all: target/$(OUTPUTNAME) target/shader.spv
+all: target/$(OUTPUTNAME) target/shader.spv target/scene.ply
 
 target/$(OUTPUTNAME): $(OBJS)
 	mkdir -p target
@@ -19,6 +19,9 @@ obj/%.o: src/%.cpp
 
 target/%.spv: src/%.comp
 	glslc $< -o $@
+
+target/scene.ply: scene.ply
+	cp scene.ply target/scene.ply
 
 run: all
 	cd target; ./$(OUTPUTNAME)

@@ -46,6 +46,13 @@ struct Renderer
     VkImageView sceneImageView;
     VkDeviceMemory sceneImageMemory;
 
+    VkBuffer paletteStagingBuffer;
+    VkDeviceMemory paletteStagingBufferMemory;
+
+    VkImage paletteImage;
+    VkImageView paletteImageView;
+    VkDeviceMemory paletteImageMemory;
+
     Pipeline pipeline;
 
     VkCommandPool computeCommandPool;
@@ -62,6 +69,6 @@ struct Renderer
 };
 
 Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers);
-void updateScene(Renderer *renderer);
+void updateScene(Renderer *renderer, unsigned char *palette, unsigned char *voxels);
 void drawFrame(Renderer *rendrer, CamInfoBuffer *camInfo);
 void cleanupRenderer(Renderer *renderPipeline);
