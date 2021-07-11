@@ -11,13 +11,40 @@ layout (binding = 1) uniform CamInfo{
     mat4 rot;
 } camInfo;
 
-layout (binding = 2, r8ui) uniform readonly uimage3D scene;
+layout (binding = 2) buffer VoxBlocks{
+	uint voxBlocks[];
+};
 layout (binding = 3, rgba8) uniform readonly image1D palette;
 
+layout (binding = 4) buffer ObjectInfo{
+	uint paletteIndex;
+	uint blockWidth;
+	uint blockHeight;
+	uint blockDepth;
+	uint blockIndices[];
+}objectInfo;
+
 const vec4 BACKGROUND_COLOR = vec4(0.1, 0.1, 0.2, 1.0);
-const int SCENE_WIDTH = 97;
-const int SCENE_HEIGHT = 79;
-const int SCENE_DEPTH = 97;
+const uint VOX_BLOCK_SCALE = 16;
+
+uint getBlockVox(uint block, ivec3 pos){
+	uint a = voxBlocks[
+		block * (VOX_BLOCK_SCALE * VOX_BLOCK_SCALE * VOX_BLOCK_SCALE / 4) + 
+		pos.z * (VOX_BLOCK_SCALE * VOX_BLOCK_SCALE / 4) + 
+		pos.y * (VOX_BLOCK_SCALE / 4) + 
+		pos.x / 4
+	];
+	return (a >> ((pos.x % 4) * 8)) & 0xFF;
+}
+
+uint getObjBlock(ivec3 pos){
+	ivec3 blockPos = pos / ivec3(VOX_BLOCK_SCALE, VOX_BLOCK_SCALE, VOX_BLOCK_SCALE);
+	uint blockLinearPos = blockPos.x + 
+	             blockPos.y * objectInfo.blockWidth +
+				 blockPos.z * objectInfo.blockWidth * objectInfo.blockHeight;
+	uint block = objectInfo.blockIndices[blockLinearPos];
+	return block;
+}
 
 void main(){
 	// RAY GENERATION
@@ -29,14 +56,18 @@ void main(){
 	const vec3 dir = vec3(camInfo.rot * normalize(vec4(screenSpaceLocation, 1, 1)));
     vec3 pos = vec3(camInfo.pos);
 
+	uint objectWidth = VOX_BLOCK_SCALE * objectInfo.blockWidth;
+	uint objectHeight = VOX_BLOCK_SCALE * objectInfo.blockHeight;
+	uint objectDepth = VOX_BLOCK_SCALE * objectInfo.blockDepth;
+
 	// ENTER VOXEL GRID
 	{
 		float tx0 = (-pos.x) / dir.x;
 		float ty0 = (-pos.y) / dir.y;
 		float tz0 = (-pos.z) / dir.z;
-		float tx1 = (SCENE_WIDTH - pos.x) / dir.x;
-		float ty1 = (SCENE_HEIGHT - pos.y) / dir.y;
-		float tz1 = (SCENE_DEPTH - pos.z) / dir.z;
+		float tx1 = (objectWidth - pos.x) / dir.x;
+		float ty1 = (objectHeight - pos.y) / dir.y;
+		float tz1 = (objectDepth - pos.z) / dir.z;
 		float tmin = max(max(min(tx0, tx1), min(ty0, ty1)), min(tz0, tz1));
 		float tmax = min(min(max(tx0, tx1), max(ty0, ty1)), max(tz0, tz1));
 		if(tmin < tmax && tmax > 0){
@@ -48,8 +79,90 @@ void main(){
 			return;
 		}
 	}
-	// TRAVERSE GRID (https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview/FastVoxelTraversalOverview.md)
 
+	ivec3 gridPos = ivec3(floor(pos));
+	gridPos = clamp(gridPos, ivec3(0), ivec3(objectWidth - 1, objectHeight - 1, objectDepth - 1));
+	ivec3 gridStep = ivec3(sign(dir));
+	vec3 tDelta = abs(1 / dir);
+	vec3 tMax = vec3(
+		dir.x < 0 ? (pos.x - gridPos.x) * tDelta.x : (gridPos.x + 1 - pos.x) * tDelta.x,
+		dir.y < 0 ? (pos.y - gridPos.y) * tDelta.y : (gridPos.y + 1 - pos.y) * tDelta.y,
+		dir.z < 0 ? (pos.z - gridPos.z) * tDelta.z : (gridPos.z + 1 - pos.z) * tDelta.z
+	);
+	ivec3 exit = ivec3(
+		dir.x < 0 ? -1 : objectWidth,
+		dir.y < 0 ? -1 : objectHeight,
+		dir.z < 0 ? -1 : objectDepth
+	);
+
+	uint hitVoxel = 0;
+	while(hitVoxel== 0){
+		uint block = getObjBlock(gridPos);
+		if (block == 0){
+			hitVoxel = 0;
+		}else{
+			hitVoxel = getBlockVox(block - 1, gridPos % ivec3(VOX_BLOCK_SCALE, VOX_BLOCK_SCALE, VOX_BLOCK_SCALE));
+		}
+		if(tMax.x < tMax.y){
+			if(tMax.x < tMax. z){
+				gridPos.x += gridStep.x;
+				if(gridPos.x == exit.x)
+					break;
+				tMax.x += tDelta.x;
+			}else{
+				gridPos.z += gridStep.z;
+				if(gridPos.z == exit.z)
+					break;
+				tMax.z += tDelta.z;
+			}
+		}else{
+			if(tMax.y < tMax.z){
+				gridPos.y += gridStep.y;
+				if(gridPos.y == exit.y)
+					break;
+				tMax.y += tDelta.y;
+			}else{
+				gridPos.z += gridStep.z;
+				if(gridPos.z == exit.z)
+					break;
+				tMax.z += tDelta.z;
+			}
+		}
+	}
+
+	if(hitVoxel == 0){
+		imageStore( image, ivec2(gl_WorkGroupID.xy), vec4(0.1, 0.1, 0.1, 1.0));
+	}else{
+		imageStore( image, ivec2(gl_WorkGroupID.xy), imageLoad(palette, int(hitVoxel) - 1) );
+	}
+
+	/*
+	// ENTER VOXEL GRID
+	uint objectWidth = objectInfo.blockWidth * VOX_BLOCK_SCALE;
+	uint objectHeight = objectInfo.blockHeight * VOX_BLOCK_SCALE;
+	uint objectDepth = objectInfo.blockDepth * VOX_BLOCK_SCALE;
+	{
+		float tx0 = (-pos.x) / dir.x;
+		float ty0 = (-pos.y) / dir.y;
+		float tz0 = (-pos.z) / dir.z;
+		float tx1 = (objectWidth- pos.x) / dir.x;
+		float ty1 = (objectHeight - pos.y) / dir.y;
+		float tz1 = (objectDepth - pos.z) / dir.z;
+		float tmin = max(max(min(tx0, tx1), min(ty0, ty1)), min(tz0, tz1));
+		float tmax = min(min(max(tx0, tx1), max(ty0, ty1)), max(tz0, tz1));
+		if(tmin < tmax && tmax > 0){
+			if (tmin > 0){
+				pos = dir * tmin + pos;
+			}
+		}else{
+			imageStore( image, ivec2(gl_WorkGroupID.xy), BACKGROUND_COLOR );
+			return;
+		}
+	}
+	*/
+
+	// TRAVERSE GRID (https://github.com/cgyurgyik/fast-voxel-traversal-algorithm/blob/master/overview/FastVoxelTraversalOverview.md)
+	/*
 	ivec3 gridPos = ivec3(floor(pos));
 	gridPos = clamp(gridPos, ivec3(0), ivec3(SCENE_WIDTH - 1, SCENE_HEIGHT - 1, SCENE_DEPTH - 1));
 	ivec3 gridStep = ivec3(sign(dir));
@@ -99,4 +212,5 @@ void main(){
 	}else{
 		imageStore( image, ivec2(gl_WorkGroupID.xy), imageLoad(palette, int(hitVoxel) - 1) );
 	}
+	*/
 }

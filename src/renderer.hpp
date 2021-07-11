@@ -14,6 +14,7 @@
 #include "vk/pipeline.hpp"
 #include "vk/synchronization.hpp"
 #include "vk/command_buffers.hpp"
+#include "vox_object.hpp"
 
 const size_t MAX_FRAMES_IN_FLIGHT = 3;
 
@@ -39,19 +40,21 @@ struct Renderer
     std::vector<VkBuffer> camInfoBuffers;
     std::vector<VkDeviceMemory> camInfoBuffersMemory;
 
-    VkBuffer sceneStagingBuffer;
-    VkDeviceMemory sceneStagingBufferMemory;
+    VkBuffer voxBlockStagingBuffer;
+    VkDeviceMemory voxBlockStagingBufferMemory;
 
-    VkImage sceneImage;
-    VkImageView sceneImageView;
-    VkDeviceMemory sceneImageMemory;
+    VkBuffer voxBlocksBuffer;
+    VkDeviceMemory voxBlocksBufferMemory;
 
     VkBuffer paletteStagingBuffer;
     VkDeviceMemory paletteStagingBufferMemory;
 
     VkImage paletteImage;
-    VkImageView paletteImageView;
     VkDeviceMemory paletteImageMemory;
+    VkImageView paletteImageView;
+
+    VkBuffer objectInfoBuffer;
+    VkDeviceMemory objectInfoBufferMemory;
 
     Pipeline pipeline;
 
@@ -69,6 +72,10 @@ struct Renderer
 };
 
 Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers);
-void updateScene(Renderer *renderer, unsigned char *palette, unsigned char *voxels);
+
+void updateObject(Renderer *renderer, VoxObject object);
+void updateBlock(Renderer *renderer, int32_t blockIndex, VoxBlock *block);
+void updatePalette(Renderer *renderer, Palette *palette);
+
 void drawFrame(Renderer *rendrer, CamInfoBuffer *camInfo);
 void cleanupRenderer(Renderer *renderPipeline);

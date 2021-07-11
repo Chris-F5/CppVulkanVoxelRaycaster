@@ -6,9 +6,8 @@
 #include "vk/command_buffers.hpp"
 #include "vk/exceptions.hpp"
 
-const uint SCENE_WIDTH = 97;
-const uint SCENE_HEIGHT = 79;
-const uint SCENE_DEPTH = 97;
+const uint32_t MAX_VOX_BLOCK_COUNT = 200;
+const uint32_t OBJECT_INFO_MEM_SIZE = 1600;
 
 void createRenderCommandBuffers(
     VkDevice device,
@@ -93,168 +92,24 @@ void createRenderCommandBuffers(
     }
 }
 
-void copyBufferToImage(
-    VkDevice device,
-    VkQueue queue,
-    VkCommandPool commandPool,
-    VkExtent3D imageExtent,
-    VkBuffer buffer,
-    VkImage image
-){
-    VkCommandBuffer commandBuffer;
-    allocateCommandBuffers(device, commandPool, 1, &commandBuffer);
-
-    beginRecordingCommandBuffer(commandBuffer, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-
-    VkImageSubresourceLayers imageSubresource{};
-    imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    imageSubresource.mipLevel = 0;
-    imageSubresource.baseArrayLayer = 0;
-    imageSubresource.layerCount = 1;
-
-    VkBufferImageCopy bufferImageCopy{};
-    bufferImageCopy.bufferOffset = 0;
-    bufferImageCopy.bufferRowLength = 0;
-    bufferImageCopy.bufferImageHeight = 0;
-    bufferImageCopy.imageSubresource = imageSubresource;
-    bufferImageCopy.imageOffset = VkOffset3D{0,0,0};
-    bufferImageCopy.imageExtent = imageExtent;
-
-    vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bufferImageCopy);
-
-    vkEndCommandBuffer(commandBuffer);
-
-    submitCommandBuffers(
-        queue,
-        1,
-        &commandBuffer,
-        0, nullptr, nullptr,
-        0, nullptr, 
-        VK_NULL_HANDLE
-    );
-
-    vkQueueWaitIdle(queue);
-
-    vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
-}
-
-void transitionImageLayout(
-    VkDevice device,
-    VkQueue queue,
-    VkCommandPool commandPool,
-    VkImage image,
-    VkFormat format,
-    VkImageLayout oldLayout,
-    VkImageLayout newLayout,
-    VkAccessFlags srcAccessMask,
-    VkPipelineStageFlags srcStageMask,
-    VkAccessFlags dstAccessMask,
-    VkPipelineStageFlags dstStageMask)
-{
-    VkCommandBuffer commandBuffer;
-    allocateCommandBuffers(device, commandPool, 1, &commandBuffer);
-
-    beginRecordingCommandBuffer(commandBuffer, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-
-    VkImageSubresourceRange subresourceRange{};
-    subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    subresourceRange.baseMipLevel = 0;
-    subresourceRange.levelCount = 1;
-    subresourceRange.baseArrayLayer = 0;
-    subresourceRange.layerCount = 1;
-
-    VkImageMemoryBarrier barrier{};
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    barrier.pNext = nullptr;
-    barrier.srcAccessMask = srcAccessMask;
-    barrier.dstAccessMask = dstAccessMask;
-    barrier.oldLayout = oldLayout;
-    barrier.newLayout = newLayout;
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = image;
-    barrier.subresourceRange = subresourceRange;
-
-    vkCmdPipelineBarrier(
-        commandBuffer,
-        srcStageMask, dstStageMask,
-        0,
-        0, nullptr,
-        0, nullptr,
-        1, &barrier
-    );
-
-    vkEndCommandBuffer(commandBuffer);
-
-    submitCommandBuffers(
-        queue,
-        1,
-        &commandBuffer,
-        0, nullptr, nullptr,
-        0, nullptr, 
-        VK_NULL_HANDLE
-    );
-
-    vkQueueWaitIdle(queue);
-
-    vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
-}
-
-void updateScene(Renderer *renderer, unsigned char *palette, unsigned char *voxels){
-    size_t voxelsSize = SCENE_WIDTH * SCENE_HEIGHT * SCENE_DEPTH;
-    void *voxelImageData;
-    vkMapMemory(renderer->device, renderer->sceneStagingBufferMemory, 0, voxelsSize, 0, &voxelImageData);
-    memcpy(voxelImageData, voxels, voxelsSize);
-    vkUnmapMemory(renderer->device, renderer->sceneStagingBufferMemory);
-
-    transitionImageLayout(
-        renderer->device,
-        renderer->computeAndPresentQueue,
-        renderer->transientComputeCommandPool,
-        renderer->sceneImage,
-        VK_FORMAT_R8_UINT,
-        VK_IMAGE_LAYOUT_UNDEFINED,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        0,
-        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-        VK_ACCESS_TRANSFER_WRITE_BIT,
-        VK_PIPELINE_STAGE_TRANSFER_BIT
-    );
-
-    copyBufferToImage(
-        renderer->device,
-        renderer->computeAndPresentQueue,
-        renderer->transientComputeCommandPool,
-        VkExtent3D{SCENE_WIDTH, SCENE_HEIGHT, SCENE_DEPTH},
-        renderer->sceneStagingBuffer,
-        renderer->sceneImage
-    );
-
-    transitionImageLayout(
-        renderer->device,
-        renderer->computeAndPresentQueue,
-        renderer->transientComputeCommandPool,
-        renderer->sceneImage,
-        VK_FORMAT_R8_UINT,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        VK_IMAGE_LAYOUT_GENERAL,
-        VK_ACCESS_TRANSFER_WRITE_BIT,
-        VK_PIPELINE_STAGE_TRANSFER_BIT,
-        VK_ACCESS_SHADER_READ_BIT,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
-    );
-
-    void *paletteData;
-    vkMapMemory(renderer->device, renderer->paletteStagingBufferMemory, 0, 256 * 4, 0, &paletteData);
-    memcpy(paletteData, palette, 256 * 4);
+void updatePalette(Renderer *renderer, Palette *palette){
+    void *data;
+    vkMapMemory(renderer->device, renderer->paletteStagingBufferMemory, 0, 256 * 4, 0, &data);
+    memcpy(data, palette, 256 * 4);
     vkUnmapMemory(renderer->device, renderer->paletteStagingBufferMemory);
+
+    VkImageSubresourceRange paletteSubresourceRange = createImageSubresourceRange(
+        VK_IMAGE_ASPECT_COLOR_BIT,
+        0, 1,
+        0, 1
+    );
 
     transitionImageLayout(
         renderer->device,
         renderer->computeAndPresentQueue,
         renderer->transientComputeCommandPool,
         renderer->paletteImage,
-        VK_FORMAT_R8G8B8A8_UNORM,
+        paletteSubresourceRange,
         VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         0,
@@ -267,7 +122,11 @@ void updateScene(Renderer *renderer, unsigned char *palette, unsigned char *voxe
         renderer->device,
         renderer->computeAndPresentQueue,
         renderer->transientComputeCommandPool,
+        VkOffset3D{0, 0, 0},
         VkExtent3D{256, 1, 1},
+        VK_IMAGE_ASPECT_COLOR_BIT,
+        0,
+        0, 1,
         renderer->paletteStagingBuffer,
         renderer->paletteImage
     );
@@ -277,7 +136,7 @@ void updateScene(Renderer *renderer, unsigned char *palette, unsigned char *voxe
         renderer->computeAndPresentQueue,
         renderer->transientComputeCommandPool,
         renderer->paletteImage,
-        VK_FORMAT_R8G8B8A8_UNORM,
+        paletteSubresourceRange,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         VK_IMAGE_LAYOUT_GENERAL,
         VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -285,6 +144,39 @@ void updateScene(Renderer *renderer, unsigned char *palette, unsigned char *voxe
         VK_ACCESS_SHADER_READ_BIT,
         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
     );
+}
+
+void updateBlock(Renderer *renderer, int32_t blockIndex, VoxBlock *block){
+    void *data;
+    vkMapMemory(renderer->device, renderer->voxBlockStagingBufferMemory, 0, sizeof(VoxBlock), 0, &data);
+    memcpy(data, block->voxels, sizeof(VoxBlock));
+    vkUnmapMemory(renderer->device, renderer->voxBlockStagingBufferMemory);
+
+    VkBufferCopy copyRegion{};
+    copyRegion.srcOffset = 0;
+    copyRegion.dstOffset = blockIndex * sizeof(VoxBlock);
+    copyRegion.size = sizeof(VoxBlock);
+
+    bufferTransfer(
+        renderer->device,
+        renderer->computeAndPresentQueue,
+        renderer->transientComputeCommandPool,
+        1,
+        &copyRegion,
+        renderer->voxBlockStagingBuffer,
+        renderer->voxBlocksBuffer
+    );
+}
+
+void updateObject(Renderer *renderer, VoxObject object){
+    uint32_t *data;
+    vkMapMemory(renderer->device, renderer->objectInfoBufferMemory, 0, OBJECT_INFO_MEM_SIZE, 0, (void**)&data);
+    memcpy(&data[0], (void*)&object.paletteIndex, sizeof(uint32_t));
+    memcpy(&data[1], (void*)&object.blockWidth, sizeof(uint32_t));
+    memcpy(&data[2], (void*)&object.blockHeight, sizeof(uint32_t));
+    memcpy(&data[3], (void*)&object.blockDepth, sizeof(uint32_t));
+    memcpy(&data[4], (void*)object.blockIndices, OBJECT_INFO_MEM_SIZE - sizeof(uint32_t) * 4);
+    vkUnmapMemory(renderer->device, renderer->objectInfoBufferMemory);
 }
 
 Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
@@ -316,23 +208,35 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
         window,
         renderer.surface);
 
-    // IMAGE STAGING BUFFERS
+    // COMMAND POOLS
+
+    renderer.computeCommandPool = createCommandPool(
+        renderer.device,
+        0,
+        renderer.computeAndPresentQueueFamily);
+
+    renderer.transientComputeCommandPool = createCommandPool(
+        renderer.device,
+        VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
+        renderer.computeAndPresentQueueFamily);
+
+    // STAGING BUFFERS
 
     createBuffer(
         renderer.device,
         renderer.physicalDevice,
-        SCENE_WIDTH * SCENE_HEIGHT * SCENE_DEPTH * sizeof(unsigned char),
+        sizeof(VoxBlock),
         0,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        &renderer.sceneStagingBuffer,
-        &renderer.sceneStagingBufferMemory
+        &renderer.voxBlockStagingBuffer,
+        &renderer.voxBlockStagingBufferMemory
     );
 
     createBuffer(
         renderer.device,
         renderer.physicalDevice,
-        256 * 4 * sizeof(unsigned char),
+        sizeof(Palette),
         0,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -356,44 +260,30 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
             &renderer.camInfoBuffersMemory[i]
         );
 
-    // COMMAND POOLS
+    // OBJECT BUFFER
 
-    renderer.computeCommandPool = createCommandPool(
-        renderer.device,
-        0,
-        renderer.computeAndPresentQueueFamily);
-
-    renderer.transientComputeCommandPool = createCommandPool(
-        renderer.device,
-        VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
-        renderer.computeAndPresentQueueFamily);
-
-
-    // SCENE IMAGE
-
-    createImage(
+    createBuffer(
         renderer.device,
         renderer.physicalDevice,
-        VK_IMAGE_TYPE_3D,
-        VK_FORMAT_R8_UINT,
-        VkExtent3D{SCENE_WIDTH, SCENE_HEIGHT, SCENE_DEPTH},
+        OBJECT_INFO_MEM_SIZE,
         0,
-        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
-        1,
-        1,
-        VK_SAMPLE_COUNT_1_BIT,
-        VK_IMAGE_TILING_OPTIMAL,
-        false,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        &renderer.sceneImage,
-        &renderer.sceneImageMemory
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        &renderer.objectInfoBuffer,
+        &renderer.objectInfoBufferMemory
     );
+    
+    // VOX BLOCKS BUFFER
 
-    renderer.sceneImageView = createImageView(
+    createBuffer(
         renderer.device,
-        renderer.sceneImage,
-        VK_FORMAT_R8_UINT,
-        VK_IMAGE_VIEW_TYPE_3D
+        renderer.physicalDevice,
+        MAX_VOX_BLOCK_COUNT * sizeof(VoxBlock),
+        0,
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        &renderer.voxBlocksBuffer,
+        &renderer.voxBlocksBufferMemory
     );
 
     // PALETTE IMAGE
@@ -420,7 +310,12 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
         renderer.device,
         renderer.paletteImage,
         VK_FORMAT_R8G8B8A8_UNORM,
-        VK_IMAGE_VIEW_TYPE_1D
+        VK_IMAGE_VIEW_TYPE_1D,
+        createImageSubresourceRange(
+            VK_IMAGE_ASPECT_COLOR_BIT,
+            0, 1,
+            0, 1
+        )
     );
 
     // DESCRIPTOR SETS
@@ -438,12 +333,11 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
     camInfoDescroptor.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
     camInfoDescroptor.buffers = renderer.camInfoBuffers;
 
-    DescriptorCreateInfo sceneDescriptor{};
-    sceneDescriptor.binding = 2;
-    sceneDescriptor.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    sceneDescriptor.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-    sceneDescriptor.imageViews = std::vector<VkImageView>(renderer.swapchain.imageCount(), renderer.sceneImageView);
-    sceneDescriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+    DescriptorCreateInfo voxBlocksDescriptor{};
+    voxBlocksDescriptor.binding = 2;
+    voxBlocksDescriptor.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    voxBlocksDescriptor.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    voxBlocksDescriptor.buffers = std::vector<VkBuffer>(renderer.swapchain.imageCount(), renderer.voxBlocksBuffer);
 
     DescriptorCreateInfo paletteDescriptor{};
     paletteDescriptor.binding = 3;
@@ -452,8 +346,14 @@ Renderer createRenderer(GLFWwindow *window, bool enableValidationLayers)
     paletteDescriptor.imageViews = std::vector<VkImageView>(renderer.swapchain.imageCount(), renderer.paletteImageView);
     paletteDescriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
+    DescriptorCreateInfo objectInfoDescriptor{};
+    objectInfoDescriptor.binding = 4;
+    objectInfoDescriptor.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    objectInfoDescriptor.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    objectInfoDescriptor.buffers = std::vector<VkBuffer>(renderer.swapchain.imageCount(), renderer.objectInfoBuffer);
+
     std::vector<DescriptorCreateInfo>
-        descriptorInfos{swapchainImageDescriptor, camInfoDescroptor, sceneDescriptor, paletteDescriptor};
+        descriptorInfos{swapchainImageDescriptor, camInfoDescroptor, voxBlocksDescriptor, paletteDescriptor, objectInfoDescriptor};
 
     renderer.descriptorSets = createDescriptorSets(renderer.device, descriptorInfos, renderer.swapchain.imageCount());
 
@@ -565,12 +465,14 @@ void cleanupRenderer(Renderer *renderer)
     vkDestroyDescriptorPool(renderer->device, renderer->descriptorSets.pool, nullptr);
     vkDestroyDescriptorSetLayout(renderer->device, renderer->descriptorSets.layout, nullptr);
 
-    vkDestroyBuffer(renderer->device, renderer->sceneStagingBuffer, nullptr);
-    vkFreeMemory(renderer->device, renderer->sceneStagingBufferMemory, nullptr);
+    vkDestroyBuffer(renderer->device, renderer->voxBlockStagingBuffer, nullptr);
+    vkFreeMemory(renderer->device, renderer->voxBlockStagingBufferMemory, nullptr);
 
-    vkDestroyImageView(renderer->device, renderer->sceneImageView, nullptr);
-    vkDestroyImage(renderer->device, renderer->sceneImage, nullptr);
-    vkFreeMemory(renderer->device, renderer->sceneImageMemory, nullptr);
+    vkDestroyBuffer(renderer->device, renderer->voxBlocksBuffer, nullptr);
+    vkFreeMemory(renderer->device, renderer->voxBlocksBufferMemory, nullptr);
+
+    vkDestroyBuffer(renderer->device, renderer->objectInfoBuffer, nullptr);
+    vkFreeMemory(renderer->device, renderer->objectInfoBufferMemory, nullptr);
 
     vkDestroyBuffer(renderer->device, renderer->paletteStagingBuffer, nullptr);
     vkFreeMemory(renderer->device, renderer->paletteStagingBufferMemory, nullptr);

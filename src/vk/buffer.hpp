@@ -11,3 +11,12 @@ void createBuffer(
     VkMemoryPropertyFlags memoryPropertyFlags,
     VkBuffer *buffer,
     VkDeviceMemory *bufferMemory);
+
+void bufferTransfer(
+    VkDevice device,
+    VkQueue queue,
+    VkCommandPool commandPool,
+    uint32_t copyRegionsCount,
+    VkBufferCopy *copyRegions,
+    VkBuffer srcBuffer,
+    VkBuffer dstBuffer);

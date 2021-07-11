@@ -172,7 +172,12 @@ Swapchain createSwapchain(
             device,
             swapchain.images[i],
             swapchain.surfaceFormat.format,
-            VK_IMAGE_VIEW_TYPE_2D);
+            VK_IMAGE_VIEW_TYPE_2D,
+            createImageSubresourceRange(
+                VK_IMAGE_ASPECT_COLOR_BIT,
+                0, 1,
+                0, 1
+            ));
     return swapchain;
 }
 

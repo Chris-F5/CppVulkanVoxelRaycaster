@@ -180,6 +180,7 @@ VkDevice createLogicalDevice(
     deviceFeatures.shaderStorageImageWriteWithoutFormat = VK_TRUE;
 
     VkDeviceCreateInfo createInfo{};
+    createInfo.pNext = nullptr;
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 
     createInfo.queueCreateInfoCount = queueFamilyIndiciesCount;

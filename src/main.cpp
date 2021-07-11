@@ -11,7 +11,7 @@
 #include "renderer.hpp"
 #include "input.hpp"
 #include "camera_controller.hpp"
-#include "model_loader.hpp"
+#include "vox_object.hpp"
 
 #ifdef NDEBUG
 const bool enableValidationLayers = false;
@@ -70,22 +70,31 @@ void mainLoop(GLFWwindow *window, Renderer *renderer)
 int main()
 {
     char voxModelFileName[] = "scene.ply";
-    unsigned int paletteSize;
-    unsigned char *palette;
-    unsigned int modelWidth, modelHeight, modelDepth;
-    unsigned char *model;
-    loadPlyVoxModel(
+    MemPool<Palette> palettes(1);
+    MemPool<VoxBlock> voxBlocks(144);
+    VoxObject object{};
+    loadPlyVoxObject(
         voxModelFileName,
-        &paletteSize, &palette,
-        &modelWidth, &modelHeight, &modelDepth, &model);
+        voxBlocks,
+        palettes,
+        &object
+    );
 
     glfwInit();
     GLFWwindow *window = createWindow("Ray Caster", WIDTH, HEIGHT);
 
     Renderer renderer = createRenderer(window, enableValidationLayers);
-    updateScene(&renderer, palette, model);
-    free(model);
-    free(palette);
+
+    for(int i = 0; i < object.blockWidth * object.blockHeight * object.blockDepth; i++){
+        int32_t blockIndex = object.blockIndices[i];
+        if(blockIndex != 0){
+            printf("%d\n", blockIndex - 1);
+            updateBlock(&renderer, blockIndex - 1, voxBlocks.getBlock(blockIndex - 1));
+        }
+    }
+
+    updateObject(&renderer, object);
+    updatePalette(&renderer, palettes.getBlock(object.paletteIndex));
 
     enableStickyKeys(window);
     mainLoop(window, &renderer);
@@ -95,6 +104,9 @@ int main()
     cleanupRenderer(&renderer);
     glfwDestroyWindow(window);
     glfwTerminate();
+
+    palettes.cleanup();
+    voxBlocks.cleanup();
     
     return EXIT_SUCCESS;
 }

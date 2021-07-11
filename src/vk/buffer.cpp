@@ -4,6 +4,7 @@
 
 #include "exceptions.hpp"
 #include "device.hpp"
+#include "command_buffers.hpp"
 
 void createBuffer(
     VkDevice device,
@@ -42,4 +43,44 @@ void createBuffer(
         "allocating buffer");
 
     vkBindBufferMemory(device, *buffer, *bufferMemory, 0);
+}
+
+void bufferTransfer(
+    VkDevice device,
+    VkQueue queue,
+    VkCommandPool commandPool,
+    uint32_t copyRegionsCount,
+    VkBufferCopy *copyRegions,
+    VkBuffer srcBuffer,
+    VkBuffer dstBuffer)
+{
+    VkCommandBuffer commandBuffer;
+    allocateCommandBuffers(
+        device,
+        commandPool,
+        1,
+        &commandBuffer
+    );
+
+    beginRecordingCommandBuffer(
+        commandBuffer,
+        VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
+    );
+
+    vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, copyRegionsCount, copyRegions);
+
+    handleVkResult(
+        vkEndCommandBuffer(commandBuffer),
+        "recording buffer transfer command");
+
+    submitCommandBuffers(
+        queue,
+        1,
+        &commandBuffer,
+        0, nullptr, nullptr,
+        0, nullptr,
+        VK_NULL_HANDLE
+    );
+
+    vkQueueWaitIdle(queue);
 }

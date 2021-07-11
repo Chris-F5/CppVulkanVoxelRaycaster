@@ -2,6 +2,24 @@
 
 #include "exceptions.hpp"
 #include "device.hpp"
+#include "command_buffers.hpp"
+
+VkImageSubresourceRange createImageSubresourceRange(
+    VkImageAspectFlags aspectMask,
+    uint32_t baseMipLevel,
+    uint32_t mipLevelCount,
+    uint32_t baseArrayLayer,
+    uint32_t arrayLayerCount)
+{
+    VkImageSubresourceRange subresourceRange{};
+    subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    subresourceRange.baseMipLevel = baseMipLevel;
+    subresourceRange.levelCount = mipLevelCount;
+    subresourceRange.baseArrayLayer = baseArrayLayer;
+    subresourceRange.layerCount = arrayLayerCount;
+
+    return subresourceRange;
+}
 
 void createImage(
     VkDevice device,
@@ -60,15 +78,9 @@ VkImageView createImageView(
     VkDevice device,
     VkImage image,
     VkFormat format,
-    VkImageViewType viewType)
+    VkImageViewType viewType,
+    VkImageSubresourceRange imageSubresourceRange)
 {
-    VkImageSubresourceRange subresourceRange{};
-    subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    subresourceRange.baseMipLevel = 0;
-    subresourceRange.levelCount = 1;
-    subresourceRange.baseArrayLayer = 0;
-    subresourceRange.layerCount = 1;
-
     VkImageViewCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     createInfo.pNext = nullptr;
@@ -81,7 +93,7 @@ VkImageView createImageView(
         VK_COMPONENT_SWIZZLE_IDENTITY,
         VK_COMPONENT_SWIZZLE_IDENTITY,
         VK_COMPONENT_SWIZZLE_IDENTITY};
-    createInfo.subresourceRange = subresourceRange;
+    createInfo.subresourceRange = imageSubresourceRange;
 
     VkImageView imageView;
     handleVkResult(
@@ -89,4 +101,109 @@ VkImageView createImageView(
         "creating image view");
     
     return imageView;
+}
+
+void copyBufferToImage(
+    VkDevice device,
+    VkQueue queue,
+    VkCommandPool commandPool,
+    VkOffset3D imageOffset,
+    VkExtent3D imageExtent,
+    VkImageAspectFlags aspectMask,
+    uint32_t mipLevel,
+    uint32_t baseArrayLayer,
+    uint32_t arrayLayerCount,
+    VkBuffer buffer,
+    VkImage image)
+{
+    VkCommandBuffer commandBuffer;
+    allocateCommandBuffers(device, commandPool, 1, &commandBuffer);
+
+    beginRecordingCommandBuffer(commandBuffer, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+
+    VkImageSubresourceLayers imageSubresource{};
+    imageSubresource.aspectMask = aspectMask;
+    imageSubresource.mipLevel = mipLevel;
+    imageSubresource.baseArrayLayer = baseArrayLayer;
+    imageSubresource.layerCount = arrayLayerCount;
+
+    VkBufferImageCopy bufferImageCopy{};
+    bufferImageCopy.bufferOffset = 0;
+    bufferImageCopy.bufferRowLength = 0;
+    bufferImageCopy.bufferImageHeight = 0;
+    bufferImageCopy.imageSubresource = imageSubresource;
+    bufferImageCopy.imageOffset = imageOffset;
+    bufferImageCopy.imageExtent = imageExtent;
+
+    vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bufferImageCopy);
+
+    vkEndCommandBuffer(commandBuffer);
+
+    submitCommandBuffers(
+        queue,
+        1,
+        &commandBuffer,
+        0, nullptr, nullptr,
+        0, nullptr, 
+        VK_NULL_HANDLE
+    );
+
+    vkQueueWaitIdle(queue);
+
+    vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+}
+
+void transitionImageLayout(
+    VkDevice device,
+    VkQueue queue,
+    VkCommandPool commandPool,
+    VkImage image,
+    VkImageSubresourceRange imageSubresourceRange,
+    VkImageLayout oldLayout,
+    VkImageLayout newLayout,
+    VkAccessFlags srcAccessMask,
+    VkPipelineStageFlags srcStageMask,
+    VkAccessFlags dstAccessMask,
+    VkPipelineStageFlags dstStageMask)
+{
+    VkCommandBuffer commandBuffer;
+    allocateCommandBuffers(device, commandPool, 1, &commandBuffer);
+
+    beginRecordingCommandBuffer(commandBuffer, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+
+    VkImageMemoryBarrier barrier{};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.pNext = nullptr;
+    barrier.srcAccessMask = srcAccessMask;
+    barrier.dstAccessMask = dstAccessMask;
+    barrier.oldLayout = oldLayout;
+    barrier.newLayout = newLayout;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = image;
+    barrier.subresourceRange = imageSubresourceRange;
+
+    vkCmdPipelineBarrier(
+        commandBuffer,
+        srcStageMask, dstStageMask,
+        0,
+        0, nullptr,
+        0, nullptr,
+        1, &barrier
+    );
+
+    vkEndCommandBuffer(commandBuffer);
+
+    submitCommandBuffers(
+        queue,
+        1,
+        &commandBuffer,
+        0, nullptr, nullptr,
+        0, nullptr, 
+        VK_NULL_HANDLE
+    );
+
+    vkQueueWaitIdle(queue);
+
+    vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
 }
